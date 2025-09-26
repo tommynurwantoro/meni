@@ -5,6 +5,7 @@ import { handleWelcomeButton } from "./welcomeButtonHandler";
 import { handleModerationButton } from "./moderationButtonHandler";
 import { handleMarketplaceButton } from "./marketplaceButtonHandler";
 import { handleLinkProtectionButton } from "./linkProtectionButtonHandler";
+import { handlePresensiButton } from "./presensiButtonHandler";
 import {
   showMainConfigPanel,
   createResetSuccessPanel,
@@ -14,6 +15,7 @@ import {
 } from "../views";
 import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
 import { handleReviewButton } from "./reviewButtonHandler";
+import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
 
 export async function handleButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -37,6 +39,8 @@ export async function handleButton(interaction: ButtonInteraction) {
     await handleLinkProtectionButton(interaction);
   } else if (customId.startsWith("review_")) {
     await handleReviewButton(interaction);
+  } else if (customId.startsWith("presensi_")) {
+    await handlePresensiButton(interaction);
   } else if (customId === "reset_confirm") {
     await handleResetConfirm(interaction);
   } else if (customId === "reset_back_to_panel") {
@@ -62,10 +66,15 @@ async function handleBackButton(interaction: ButtonInteraction) {
     await showMarketplaceConfigPanel(interaction);
   }
 
+  if (customId === "presensi_channel_back" || customId === "presensi_role_back") {
+    await showPresensiConfigPanel(interaction);
+  }
+
   if (
     customId === "welcome_back" ||
     customId === "points_back" ||
     customId === "moderation_back" ||
+    customId === "presensi_back" ||
     customId === "reset_cancel" ||
     customId === "reset_back_to_panel" ||
     customId === "main_back"
@@ -96,6 +105,11 @@ async function handleResetConfirm(interaction: ButtonInteraction) {
         linkProtection: false,
         whitelistDomains: [],
         logsChannel: "",
+      },
+      presensi: {
+        channel: "",
+        role: "",
+        enabled: false,
       },
     });
 

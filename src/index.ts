@@ -4,6 +4,7 @@ import { readdirSync } from 'fs';
 import { join } from 'path';
 import sequelize from './utils/database';
 import './models/Review';
+import { initializeScheduler } from './utils/scheduler';
 
 // Extend Discord client with custom properties
 declare module 'discord.js' {
@@ -111,6 +112,11 @@ const initializeBot = async () => {
 
     // Login to Discord
     await client.login(process.env.DISCORD_TOKEN);
+
+    // Initialize scheduler after login
+    client.once(Events.ClientReady, () => {
+        initializeScheduler(client);
+    });
 };
 
 // Start the bot

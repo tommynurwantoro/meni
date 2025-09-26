@@ -27,6 +27,11 @@ export interface GuildConfig {
         lastMessageId?: string;
         lastChannelId?: string;
     };
+    presensi?: {
+        channel?: string;
+        role?: string;
+        enabled?: boolean;
+    };
     setupBy?: string;
     setupAt?: string;
 }

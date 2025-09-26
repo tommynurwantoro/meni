@@ -60,6 +60,17 @@ export async function createMainConfigPanel(
           : "❌ Not configured",
         inline: false,
       },
+      {
+        name: "⏰ Presensi Reminders",
+        value: config?.presensi?.enabled && config?.presensi?.channel && config?.presensi?.role
+          ? `
+                    ✅ Configured
+                    Channel: <#${config.presensi.channel}>
+                    Role: <@&${config.presensi.role}>
+                    Schedule: 07:55 & 17:05 (Weekdays)`
+          : "❌ Not configured",
+        inline: false,
+      },
     )
     .setFooter({ text: "Powered by BULLSTER" })
     .setTimestamp();
@@ -102,7 +113,16 @@ export async function createMainConfigPanel(
           : ButtonStyle.Secondary
       )
       .setEmoji("💰")
-      .setDisabled(!config?.points?.logsChannel)
+      .setDisabled(!config?.points?.logsChannel),
+    new ButtonBuilder()
+      .setCustomId("config_presensi")
+      .setLabel("Presensi Reminders")
+      .setStyle(
+        config?.presensi?.enabled && config?.presensi?.channel && config?.presensi?.role
+          ? ButtonStyle.Success
+          : ButtonStyle.Primary
+      )
+      .setEmoji("⏰")
   );
 
   const row3 = new ActionRowBuilder().addComponents(
