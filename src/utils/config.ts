@@ -24,7 +24,8 @@ export interface GuildConfig {
         whitelistDomains?: string[];
     };
     titipReview?: {
-        channel?: string;
+        lastMessageId?: string;
+        lastChannelId?: string;
     };
     setupBy?: string;
     setupAt?: string;

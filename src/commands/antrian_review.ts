@@ -1,13 +1,9 @@
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
-  EmbedBuilder,
   MessageFlags,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } from "discord.js";
-import Review from "../models/Review";
+import { getReviewQueueData, updateReviewMessage } from "../utils/reviewUtils";
 
 export const data = new SlashCommandBuilder()
   .setName("antrian_review")
@@ -25,64 +21,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   }
 
   try {
-    const reviews = await Review.findAll({
-      where: {
-        guild_id: interaction.guildId,
-      },
-      order: [["created_at", "ASC"]],
-    });
+    // Get review queue data using centralized function
+    const reviewData = await getReviewQueueData(interaction.guildId);
 
-    // Collect all unique reviewer IDs for notifications
-    const reviewerIds = [
-      ...new Set(reviews.flatMap((review) => review.reviewer)),
-    ];
-    const reviewerMentions =
-      reviewerIds.length > 0
-        ? reviewerIds.map((id) => `<@${id}>`).join(" ")
-        : "";
+    // Update review message using centralized function
+    await updateReviewMessage(interaction.guildId, interaction.channel, reviewData);
 
-    const embed = new EmbedBuilder()
-      .setColor("#00ff00")
-      .setTitle("📋 Antrian Review")
-      .setDescription(
-        "Reviewers can use command `/titip_review` or use button below to update the review status. Here is the queue:"
-      )
-      .addFields({
-        name: reviews.length > 0 ? "Need Review" : "No reviews in queue",
-        value:
-          reviews.length > 0
-            ? reviews
-                .map(
-                  (review, index) =>
-                    `${index + 1}. **[${review.title}](${review.url})** by <@${
-                      review.reporter
-                    }>\n\tReviewers: ${review.reviewer
-                      .map((id) => `<@${id}>`)
-                      .join(", ")} (${review.total_pending} pending)`
-                )
-                .join("\n")
-            : "",
-        inline: false,
-      })
-      .setFooter({
-        text: "Powered by BULLSTER",
-      })
-      .setTimestamp();
-
-    const button = new ButtonBuilder()
-      .setCustomId("review_done")
-      .setLabel("Done Review")
-      .setEmoji("✅")
-      .setStyle(ButtonStyle.Primary);
-
-    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      button
-    );
-
+    // Send ephemeral success message to user
     await interaction.reply({
-      content: reviewerMentions,
-      embeds: [embed],
-      components: [actionRow],
+      content: "✅ Review queue updated successfully!",
+      flags: MessageFlags.Ephemeral,
     });
   } catch (error) {
     console.error("Error fetching reviews:", error);

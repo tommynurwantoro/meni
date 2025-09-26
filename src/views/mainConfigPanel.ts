@@ -60,15 +60,6 @@ export async function createMainConfigPanel(
           : "❌ Not configured",
         inline: false,
       },
-      {
-        name: "💰 Titip Review Feature",
-        value: config?.titipReview?.channel
-          ? `
-                    ✅ Configured
-                    Channel: <#${config.titipReview.channel}>`
-          : "❌ Not configured",
-        inline: false,
-      }
     )
     .setFooter({ text: "Powered by BULLSTER" })
     .setTimestamp();

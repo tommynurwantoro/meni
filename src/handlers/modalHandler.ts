@@ -1,15 +1,13 @@
 import {
   ModalSubmitInteraction,
   MessageFlags,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } from "discord.js";
 import { Op } from "sequelize";
 import Review from "../models/Review";
 import { showMarketplaceStockPanel } from "../views/marketplace/marketplaceStockPanel";
 import { createLinkProtectionPanel } from "../views/moderation/linkProtectionPanel";
+import { ConfigManager } from "../utils/config";
+import { getReviewQueueData, sendReviewMessage, updateReviewMessage } from "../utils/reviewUtils";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
@@ -510,80 +508,11 @@ async function handleDoneReviewModal(
       await review.destroy();
     }
 
-    // Remove completed reviews (total_pending = 0) from the list
-    const activeReviews = reviews.filter((r) => {
-      // If this is the review we just updated, use the new total_pending value
-      if (r.id === review.id) {
-        return review.total_pending > 0;
-      }
-      // For other reviews, use their current total_pending value
-      return r.total_pending > 0;
-    });
+    // Get updated review queue data using centralized function
+    const reviewData = await getReviewQueueData(guildId);
 
-    // Collect all unique reviewer IDs for notifications from active reviews only
-    const reviewerIds = [
-      ...new Set(activeReviews.flatMap((review) => review.reviewer)),
-    ];
-    const reviewerMentions =
-      reviewerIds.length > 0
-        ? reviewerIds.map((id) => `<@${id}>`).join(" ")
-        : "";
-
-    // Create updated embed with only active reviews
-    const embed = new EmbedBuilder()
-      .setColor("#00ff00")
-      .setTitle("📋 Antrian Review")
-      .setDescription(
-        "Reviewers can use command /titip_review or use button below to update the review status. Here is the queue:"
-      )
-      .addFields({
-        name: reviews.length > 0 ? "Need Review" : "No reviews in queue",
-        value:
-          activeReviews.length > 0
-            ? activeReviews
-                .map(
-                  (review, index) =>
-                    `${index + 1}. **[${review.title}](${review.url})** by <@${
-                      review.reporter
-                    }>\n\tReviewers: ${review.reviewer
-                      .map((id) => `<@${id}>`)
-                      .join(", ")} (${review.total_pending} pending)`
-                )
-                .join("\n")
-            : "",
-        inline: false,
-      })
-      .setFooter({
-        text: "Powered by BULLSTER",
-      })
-      .setTimestamp();
-
-    const button = new ButtonBuilder()
-      .setCustomId("review_done")
-      .setLabel("Done Review")
-      .setEmoji("✅")
-      .setStyle(ButtonStyle.Primary);
-
-    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      button
-    );
-
-    const channel = interaction.channel;
-    if (channel && channel.isTextBased()) {
-      const message = await channel.messages.fetch(messageId);
-
-      // Delete the old message
-      await message.delete();
-
-      // Send a new message with updated queue (this will trigger notifications)
-      if ("send" in channel) {
-        await channel.send({
-          content: reviewerMentions,
-          embeds: [embed],
-          components: [actionRow],
-        });
-      }
-    }
+    // Send updated review message using centralized function
+    await updateReviewMessage(guildId, interaction.channel, reviewData);
 
     await interaction.reply({
       content: "✅ Review marked as done!",
