@@ -32,6 +32,11 @@ export interface GuildConfig {
         role?: string;
         enabled?: boolean;
     };
+    sholat?: {
+        channel?: string;
+        role?: string;
+        enabled?: boolean;
+    };
     setupBy?: string;
     setupAt?: string;
 }

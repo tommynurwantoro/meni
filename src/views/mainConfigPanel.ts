@@ -62,15 +62,32 @@ export async function createMainConfigPanel(
       },
       {
         name: "⏰ Presensi Reminders",
-        value: config?.presensi?.enabled && config?.presensi?.channel && config?.presensi?.role
-          ? `
+        value:
+          config?.presensi?.enabled &&
+          config?.presensi?.channel &&
+          config?.presensi?.role
+            ? `
                     ✅ Configured
                     Channel: <#${config.presensi.channel}>
                     Role: <@&${config.presensi.role}>
                     Schedule: 07:55 & 17:05 (Weekdays)`
-          : "❌ Not configured",
+            : "❌ Not configured",
         inline: false,
       },
+      {
+        name: "🕌 Sholat Reminders",
+        value:
+          config?.sholat?.enabled &&
+          config?.sholat?.channel &&
+          config?.sholat?.role
+            ? `
+                    ✅ Configured
+                    Channel: <#${config.sholat.channel}>
+                    Role: <@&${config.sholat.role}>
+                    Schedule: Automatic prayer times`
+            : "❌ Not configured",
+        inline: false,
+      }
     )
     .setFooter({ text: "Powered by BULLSTER" })
     .setTimestamp();
@@ -118,11 +135,24 @@ export async function createMainConfigPanel(
       .setCustomId("config_presensi")
       .setLabel("Presensi Reminders")
       .setStyle(
-        config?.presensi?.enabled && config?.presensi?.channel && config?.presensi?.role
+        config?.presensi?.enabled &&
+          config?.presensi?.channel &&
+          config?.presensi?.role
           ? ButtonStyle.Success
           : ButtonStyle.Primary
       )
-      .setEmoji("⏰")
+      .setEmoji("⏰"),
+    new ButtonBuilder()
+      .setCustomId("config_sholat")
+      .setLabel("Sholat Reminders")
+      .setStyle(
+        config?.sholat?.enabled &&
+          config?.sholat?.channel &&
+          config?.sholat?.role
+          ? ButtonStyle.Success
+          : ButtonStyle.Primary
+      )
+      .setEmoji("🕌")
   );
 
   const row3 = new ActionRowBuilder().addComponents(

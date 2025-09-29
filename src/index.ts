@@ -5,6 +5,7 @@ import { join } from 'path';
 import sequelize from './utils/database';
 import './models/Review';
 import { initializeScheduler } from './utils/scheduler';
+import { redisManager } from './utils/redis';
 
 // Extend Discord client with custom properties
 declare module 'discord.js' {
@@ -92,6 +93,19 @@ process.on('unhandledRejection', (error) => {
     console.error('❌ Unhandled promise rejection:', error);
 });
 
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('🛑 Shutting down gracefully...');
+    await redisManager.disconnect();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('🛑 Shutting down gracefully...');
+    await redisManager.disconnect();
+    process.exit(0);
+});
+
 // Initialize bot
 const initializeBot = async () => {
     console.log('🚀 Bot is starting up...');
@@ -104,6 +118,15 @@ const initializeBot = async () => {
     } catch (error) {
         console.error('❌ Database connection failed:', error);
         process.exit(1);
+    }
+
+    // Connect to Redis
+    try {
+        await redisManager.connect();
+        console.log('✅ Redis connected');
+    } catch (error) {
+        console.error('❌ Redis connection failed:', error);
+        console.log('⚠️ Continuing without Redis - some features may not work');
     }
 
     // Load commands and events

@@ -4,6 +4,7 @@ import { showPointsConfigPanel } from "../views/points/pointConfigPanel";
 import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
 import { showMarketplaceConfigPanel } from "../views/marketplace/marketplaceConfigPanel";
 import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
+import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
 
 export async function handleConfigButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -23,6 +24,9 @@ export async function handleConfigButton(interaction: ButtonInteraction) {
       break;
     case "config_presensi":
       await handlePresensiConfig(interaction);
+      break;
+    case "config_sholat":
+      await handleSholatConfig(interaction);
       break;
     case "config_reset":
       await handleResetConfig(interaction);
@@ -56,6 +60,11 @@ async function handleMarketplaceConfig(interaction: ButtonInteraction) {
 async function handlePresensiConfig(interaction: ButtonInteraction) {
   if (!interaction.guildId) return;
   await showPresensiConfigPanel(interaction);
+}
+
+async function handleSholatConfig(interaction: ButtonInteraction) {
+  if (!interaction.guildId) return;
+  await showSholatConfigPanel(interaction);
 }
 
 async function handleResetConfig(interaction: ButtonInteraction) {

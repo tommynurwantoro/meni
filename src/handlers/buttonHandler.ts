@@ -6,6 +6,7 @@ import { handleModerationButton } from "./moderationButtonHandler";
 import { handleMarketplaceButton } from "./marketplaceButtonHandler";
 import { handleLinkProtectionButton } from "./linkProtectionButtonHandler";
 import { handlePresensiButton } from "./presensiButtonHandler";
+import { handleSholatButton } from "./sholatButtonHandler";
 import {
   showMainConfigPanel,
   createResetSuccessPanel,
@@ -16,6 +17,7 @@ import {
 import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
 import { handleReviewButton } from "./reviewButtonHandler";
 import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
+import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
 
 export async function handleButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -41,6 +43,8 @@ export async function handleButton(interaction: ButtonInteraction) {
     await handleReviewButton(interaction);
   } else if (customId.startsWith("presensi_")) {
     await handlePresensiButton(interaction);
+  } else if (customId.startsWith("sholat_")) {
+    await handleSholatButton(interaction);
   } else if (customId === "reset_confirm") {
     await handleResetConfirm(interaction);
   } else if (customId === "reset_back_to_panel") {
@@ -68,6 +72,10 @@ async function handleBackButton(interaction: ButtonInteraction) {
 
   if (customId === "presensi_channel_back" || customId === "presensi_role_back") {
     await showPresensiConfigPanel(interaction);
+  }
+
+  if (customId === "sholat_channel_back" || customId === "sholat_role_back") {
+    await showSholatConfigPanel(interaction);
   }
 
   if (
@@ -107,6 +115,11 @@ async function handleResetConfirm(interaction: ButtonInteraction) {
         logsChannel: "",
       },
       presensi: {
+        channel: "",
+        role: "",
+        enabled: false,
+      },
+      sholat: {
         channel: "",
         role: "",
         enabled: false,
