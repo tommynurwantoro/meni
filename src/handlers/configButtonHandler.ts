@@ -1,6 +1,6 @@
 import { ButtonInteraction, MessageFlags } from "discord.js";
 import { showWelcomeConfigPanel, createResetConfirmPanel } from "../views";
-import { showPointsConfigPanel } from "../views/points/pointConfigPanel";
+import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
 import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
 import { showMarketplaceConfigPanel } from "../views/marketplace/marketplaceConfigPanel";
 import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";

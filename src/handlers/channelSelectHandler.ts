@@ -1,11 +1,9 @@
 import { ChannelSelectMenuInteraction, MessageFlags } from "discord.js";
 import { ConfigManager } from "../utils/config";
 import { createModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
-import {
-  createMarketplaceConfigPanel,
-} from "../views/marketplace/marketplaceConfigPanel";
+import { createMarketplaceConfigPanel } from "../views/marketplace/marketplaceConfigPanel";
 import { createWelcomeConfigPanel } from "../views/welcome/welcomeConfigPanel";
-import { createPointsChannelSelectionPanel } from "../views/points/pointConfigPanel";
+import { createPointsConfigPanel } from "../views/points/pointsConfigPanel";
 import { createPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
 import { createSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
 
@@ -29,6 +27,9 @@ export async function handleChannelSelect(
       break;
     case "moderation_channel_back":
       await handleModerationChannelBack(interaction);
+      break;
+    case "thanks_channel_select":
+      await handleThanksChannelSelect(interaction);
       break;
     case "marketplace_channel_select":
       await handleMarketplaceChannelSelect(interaction);
@@ -123,7 +124,8 @@ async function handlePointsLogsChannel(
     if (channel && channel.isTextBased()) {
       const message = await channel.messages.fetch(interaction.message.id);
       if (message) {
-        const panel = createPointsChannelSelectionPanel(interaction.guildId!);
+        const panel = await createPointsConfigPanel(interaction.guildId!);
+        if (!panel) return;
 
         await message.edit({
           embeds: [panel.embed],
@@ -179,6 +181,62 @@ async function handlePointsMarketplaceChannel(
     console.error("Error setting points marketplace channel:", error);
     await interaction.reply({
       content: "❌ Failed to set points marketplace channel. Please try again.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+}
+
+async function handleThanksChannelSelect(
+  interaction: ChannelSelectMenuInteraction
+) {
+  const guildId = interaction.guildId;
+  if (!guildId) return;
+
+  const selectedChannel = interaction.channels.first();
+  if (!selectedChannel) {
+    await interaction.reply({
+      content: "❌ No channel selected. Please try again.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  try {
+    // Update the configuration with the selected thanks channel
+    const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
+    const pointsConfig = currentConfig.points || {};
+
+    ConfigManager.updateGuildConfig(guildId, {
+      ...currentConfig,
+      points: {
+        ...pointsConfig,
+        thanksChannel: selectedChannel?.id,
+      },
+    });
+
+    const channel = interaction.channel;
+    if (channel && channel.isTextBased()) {
+      const message = await channel.messages.fetch(interaction.message.id);
+      if (message) {
+        const panel = await createPointsConfigPanel(interaction.guildId!);
+        if (!panel) return;
+        
+        await message.edit({
+          embeds: [panel.embed],
+          components: [panel.components[0] as any, panel.components[1] as any],
+        });
+      }
+    }
+
+    await interaction.reply({
+      content: `✅ Thanks channel set to <#${selectedChannel?.id}>!`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  } catch (error) {
+    console.error("Error setting thanks channel:", error);
+    await interaction.reply({
+      content: "❌ Failed to set thanks channel. Please try again.",
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -301,7 +359,9 @@ async function handleModerationChannelBack(
   });
 }
 
-async function handlePresensiChannelSelect(interaction: ChannelSelectMenuInteraction) {
+async function handlePresensiChannelSelect(
+  interaction: ChannelSelectMenuInteraction
+) {
   const guildId = interaction.guildId;
   if (!guildId) return;
 
@@ -356,7 +416,9 @@ async function handlePresensiChannelSelect(interaction: ChannelSelectMenuInterac
   }
 }
 
-async function handleSholatChannelSelect(interaction: ChannelSelectMenuInteraction) {
+async function handleSholatChannelSelect(
+  interaction: ChannelSelectMenuInteraction
+) {
   const guildId = interaction.guildId;
   if (!guildId) return;
 
@@ -366,47 +428,47 @@ async function handleSholatChannelSelect(interaction: ChannelSelectMenuInteracti
       content: "❌ No channel selected. Please try again.",
       flags: MessageFlags.Ephemeral,
     });
-      return;
-    }
+    return;
+  }
 
-    try {
-      // Update the configuration with the selected sholat channel
-      const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
-      const sholatConfig = currentConfig.sholat || {};
+  try {
+    // Update the configuration with the selected sholat channel
+    const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
+    const sholatConfig = currentConfig.sholat || {};
 
-      ConfigManager.updateGuildConfig(guildId, {
-        ...currentConfig,
-        sholat: {
-          ...sholatConfig,
-          channel: selectedChannel?.id,
-        },
-      });
+    ConfigManager.updateGuildConfig(guildId, {
+      ...currentConfig,
+      sholat: {
+        ...sholatConfig,
+        channel: selectedChannel?.id,
+      },
+    });
 
-      const channel = interaction.channel;
-      if (channel && channel.isTextBased()) {
-        const message = await channel.messages.fetch(interaction.message.id);
-        if (message) {
-          const panel = await createSholatConfigPanel(interaction.guildId!);
-          if (!panel) return;
+    const channel = interaction.channel;
+    if (channel && channel.isTextBased()) {
+      const message = await channel.messages.fetch(interaction.message.id);
+      if (message) {
+        const panel = await createSholatConfigPanel(interaction.guildId!);
+        if (!panel) return;
 
-          await message.edit({
-            embeds: [panel.embed],
-            components: [panel.components[0] as any, panel.components[1] as any],
-          });
+        await message.edit({
+          embeds: [panel.embed],
+          components: [panel.components[0] as any, panel.components[1] as any],
+        });
 
-          await interaction.reply({
-            content: `✅ Sholat channel set to <#${selectedChannel?.id}>!`,
-            flags: MessageFlags.Ephemeral,
-          });
+        await interaction.reply({
+          content: `✅ Sholat channel set to <#${selectedChannel?.id}>!`,
+          flags: MessageFlags.Ephemeral,
+        });
 
-          return;
-        }
+        return;
       }
-    } catch (error) {
-      console.error("Error setting sholat channel:", error);
-      await interaction.reply({
-        content: "❌ Failed to set sholat channel. Please try again.",
+    }
+  } catch (error) {
+    console.error("Error setting sholat channel:", error);
+    await interaction.reply({
+      content: "❌ Failed to set sholat channel. Please try again.",
       flags: MessageFlags.Ephemeral,
     });
   }
-} 
+}

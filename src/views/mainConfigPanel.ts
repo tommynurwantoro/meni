@@ -43,12 +43,16 @@ export async function createMainConfigPanel(
         inline: false,
       },
       {
-        name: "☀️ Points Feature",
-        value: config?.points?.logsChannel
-          ? `
+        name: "☀️ Points System",
+        value:
+          config?.points?.enabled &&
+          config?.points?.logsChannel &&
+          config?.points?.thanksChannel
+            ? `
                     ✅ Configured
-                    Logs: <#${config.points.logsChannel}>`
-          : "❌ Not configured",
+                    Logs: <#${config.points.logsChannel}>
+                    Thanks: <#${config.points.thanksChannel}>`
+            : "❌ Not configured",
         inline: false,
       },
       {

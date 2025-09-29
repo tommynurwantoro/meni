@@ -8,6 +8,8 @@ export interface GuildConfig {
     };
     points?: {
         logsChannel?: string;
+        thanksChannel?: string;
+        enabled?: boolean;
         marketplaceChannel?: string;
         stock?: Array<{
             name: string;

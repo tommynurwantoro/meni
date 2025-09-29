@@ -4,9 +4,6 @@ export { createMainConfigPanel, showMainConfigPanel } from './mainConfigPanel';
 // Welcome configuration panel
 export { showWelcomeConfigPanel } from './welcome/welcomeConfigPanel';
 
-// Points configuration panel
-export { createPointsChannelSelectionPanel } from './points/pointConfigPanel';
-
 // Moderation configuration panel
 export { createModerationConfigPanel } from './moderation/moderationConfigPanel';
 export { createModerationChannelPanel } from './moderation/moderationChannelPanel';
