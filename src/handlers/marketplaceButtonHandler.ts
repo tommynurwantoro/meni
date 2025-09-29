@@ -14,9 +14,6 @@ export async function handleMarketplaceButton(interaction: ButtonInteraction) {
         case 'marketplace_stock':
             await handleMarketplaceStock(interaction);
             break;
-        case 'marketplace_back':
-            await handleMarketplaceBack(interaction);
-            break;
         case 'stock_add':
             await handleStockAdd(interaction);
             break;
@@ -25,9 +22,6 @@ export async function handleMarketplaceButton(interaction: ButtonInteraction) {
             break;
         case 'stock_remove':
             await handleStockRemove(interaction);
-            break;
-        case 'stock_back':
-            await handleStockBack(interaction);
             break;
         default:
             await interaction.reply({
@@ -81,14 +75,6 @@ async function handleMarketplaceDisable(interaction: ButtonInteraction) {
 async function handleMarketplaceStock(interaction: ButtonInteraction) {
     if (!interaction.guildId) return;
     await showMarketplaceStockPanel(interaction);
-}
-
-async function handleMarketplaceBack(interaction: ButtonInteraction) {
-    // This will be handled by the main button handler's back button logic
-    await interaction.reply({
-        content: 'Use the back button to return to the main configuration panel.',
-        flags: MessageFlags.Ephemeral
-    });
 }
 
 async function handleStockAdd(interaction: ButtonInteraction) {

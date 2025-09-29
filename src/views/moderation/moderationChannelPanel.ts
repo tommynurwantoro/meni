@@ -32,7 +32,7 @@ export function createModerationChannelPanel() {
     const buttonRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId('moderation_channel_back')
+                .setCustomId('moderation_back')
                 .setLabel('Back to Moderation Config')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⬅️')

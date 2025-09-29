@@ -1,4 +1,4 @@
-import { ChannelSelectMenuInteraction, MessageFlags } from "discord.js";
+import { ChannelSelectMenuInteraction, MessageFlags, User } from "discord.js";
 import { ConfigManager } from "../utils/config";
 import { createModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
 import { createMarketplaceConfigPanel } from "../views/marketplace/marketplaceConfigPanel";
@@ -24,9 +24,6 @@ export async function handleChannelSelect(
       break;
     case "moderation_channel_select":
       await handleModerationLogsChannel(interaction);
-      break;
-    case "moderation_channel_back":
-      await handleModerationChannelBack(interaction);
       break;
     case "thanks_channel_select":
       await handleThanksChannelSelect(interaction);
@@ -220,7 +217,7 @@ async function handleThanksChannelSelect(
       if (message) {
         const panel = await createPointsConfigPanel(interaction.guildId!);
         if (!panel) return;
-        
+
         await message.edit({
           embeds: [panel.embed],
           components: [panel.components[0] as any, panel.components[1] as any],
@@ -346,17 +343,6 @@ async function handleModerationLogsChannel(
       flags: MessageFlags.Ephemeral,
     });
   }
-}
-
-async function handleModerationChannelBack(
-  interaction: ChannelSelectMenuInteraction
-) {
-  if (!interaction.guildId) return;
-  const panel = createModerationConfigPanel(interaction.guildId);
-  await interaction.update({
-    embeds: [panel.embed],
-    components: [panel.components[0] as any],
-  });
 }
 
 async function handlePresensiChannelSelect(

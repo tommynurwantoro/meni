@@ -1,8 +1,19 @@
-import { ButtonInteraction, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import {
+  ButtonInteraction,
+  MessageFlags,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  UserSelectMenuBuilder,
+} from "discord.js";
 import { ConfigManager } from "../utils/config";
 import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
 import { showPointsLogsChannelPanel } from "../views/points/pointsLogsChannelPanel";
 import { showPointsThanksChannelPanel } from "../views/points/pointsThanksChannelPanel";
+import {
+  getUserBalance,
+} from "../utils/pointsUtils";
 
 export async function handlePointsButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -30,6 +41,14 @@ export async function handlePointsButton(interaction: ButtonInteraction) {
         await handlePointsToggle(interaction);
         break;
 
+      case "points_send_thanks":
+        await handleSendThanks(interaction);
+        break;
+
+      case "points_check_balance":
+        await handleCheckBalance(interaction);
+        break;
+
       default:
         await interaction.reply({
           content: "❌ Unknown points button interaction",
@@ -46,7 +65,7 @@ export async function handlePointsButton(interaction: ButtonInteraction) {
 }
 
 async function handlePointsLogsChannel(interaction: ButtonInteraction) {
-  await showPointsLogsChannelPanel(interaction); 
+  await showPointsLogsChannelPanel(interaction);
 }
 
 async function handlePointsThanksChannel(interaction: ButtonInteraction) {
@@ -62,14 +81,15 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
 
   if (!pointsConfig?.logsChannel || !pointsConfig?.thanksChannel) {
     await interaction.reply({
-      content: "❌ Please set both logs channel and thanks channel before enabling points system.",
+      content:
+        "❌ Please set both logs channel and thanks channel before enabling points system.",
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
   const newEnabled = !pointsConfig.enabled;
-  
+
   ConfigManager.updateGuildConfig(guildId, {
     points: {
       ...pointsConfig,
@@ -89,7 +109,9 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
         return;
       }
 
-      const thanksChannel = guild.channels.cache.get(pointsConfig.thanksChannel);
+      const thanksChannel = guild.channels.cache.get(
+        pointsConfig.thanksChannel
+      );
       if (!thanksChannel || !thanksChannel.isTextBased()) {
         await interaction.reply({
           content: "❌ Thanks channel not found or not accessible.",
@@ -101,12 +123,12 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
       // Create points system embed
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
-        .setTitle(":thumbsup: Thanks!")
+        .setTitle("👍 Thanks!")
         .setDescription(
           "• Give thanks to other members to earn them points\n" +
-          "• Check your balance anytime\n" +
-          "• Points can be used in the marketplace\n\n" +
-          "Use the buttons below to get started!"
+            "• Check your balance anytime\n" +
+            "• Points can be used in the marketplace\n\n" +
+            "Use the buttons below to get started!"
         )
         .setFooter({ text: "Powered by BULLSTER" })
         .setTimestamp();
@@ -114,7 +136,7 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
       // Create buttons
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId("send_thanks")
+          .setCustomId("points_send_thanks")
           .setLabel("Send Thanks")
           .setStyle(ButtonStyle.Success)
           .setEmoji("🙏"),
@@ -131,18 +153,148 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
         components: [row],
       });
 
-      await showPointsConfigPanel(interaction, 
+      await showPointsConfigPanel(
+        interaction,
         `✅ Points system enabled successfully! Welcome message sent to <#${pointsConfig.thanksChannel}>`
       );
     } catch (error) {
       console.error("Error sending points system message:", error);
-      await showPointsConfigPanel(interaction, 
+      await showPointsConfigPanel(
+        interaction,
         `✅ Points system enabled, but failed to send welcome message to thanks channel.`
       );
     }
   } else {
-    await showPointsConfigPanel(interaction, 
+    await showPointsConfigPanel(
+      interaction,
       `✅ Points system disabled successfully!`
     );
+  }
+}
+
+async function handleSendThanks(interaction: ButtonInteraction) {
+  const guildId = interaction.guildId;
+  if (!guildId) return;
+
+  const config = ConfigManager.getGuildConfig(guildId);
+  const pointsConfig = config?.points;
+
+  if (!pointsConfig?.enabled) {
+    await interaction.reply({
+      content: "❌ Points system is not enabled in this server.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle("👍 Send Thanks")
+    .setDescription(
+      "Select a user to give thanks to. They will receive points!"
+    );
+
+  const userSelect =
+    new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId("thanks_user_select")
+        .setPlaceholder("Select a user to thank")
+        .setMinValues(1)
+        .setMaxValues(1)
+    );
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("points_back")
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("❌")
+  );
+
+  await interaction.reply({
+    embeds: [embed],
+    components: [userSelect, buttonRow],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+async function handleCheckBalance(interaction: ButtonInteraction) {
+  const guildId = interaction.guildId;
+  const userId = interaction.user.id;
+
+  if (!guildId) return;
+
+  const config = ConfigManager.getGuildConfig(guildId);
+  const pointsConfig = config?.points;
+
+  if (!pointsConfig?.enabled) {
+    await interaction.reply({
+      content: "❌ Points system is not enabled in this server.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  try {
+    const balance = await getUserBalance(userId, guildId);
+
+    if (!balance) {
+      await interaction.reply({
+        content:
+          "❌ You don't have a points account yet. Give or receive some thanks to get started!",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("💰 Your Points Balance")
+      .setDescription(`Here's your current points information:`)
+      .addFields(
+        {
+          name: "💎 Points",
+          value: balance.points.toString(),
+          inline: true,
+        },
+        {
+          name: "⭐ Level",
+          value: balance.level.toString(),
+          inline: true,
+        },
+        {
+          name: "📊 Rank",
+          value: `#${balance.rank}`,
+          inline: true,
+        },
+        {
+          name: "📈 Total Received",
+          value: balance.total_received.toString(),
+          inline: true,
+        },
+        {
+          name: "📤 Total Given",
+          value: balance.total_given.toString(),
+          inline: true,
+        },
+        {
+          name: "🎯 Experience",
+          value: `${balance.experience}/100`,
+          inline: true,
+        }
+      )
+      .setFooter({ text: "Powered by BULLSTER" })
+      .setTimestamp();
+
+    await interaction.reply({
+      embeds: [embed],
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    console.error("Error checking balance:", error);
+    await interaction.reply({
+      content: "❌ An error occurred while checking your balance.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 }

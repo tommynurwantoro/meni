@@ -26,7 +26,7 @@ export function createPresensiRolePanel() {
     const buttonRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId('presensi_role_back')
+                .setCustomId('presensi_back')
                 .setLabel('Back to Presensi Config')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⬅️')

@@ -83,4 +83,5 @@ Review.init(
   }
 );
 
+export { Review };
 export default Review;

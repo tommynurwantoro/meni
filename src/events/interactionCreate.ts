@@ -4,6 +4,8 @@ import { handleButton } from '../handlers/buttonHandler';
 import { handleModal } from '../handlers/modalHandler';
 import { handleChannelSelect } from '../handlers/channelSelectHandler';
 import { handleRoleSelect } from '../handlers/roleSelectHandler';
+import { handleUserSelect } from '../handlers/userSelectHandler';
+import { handleStringSelect } from '../handlers/stringSelectHandler';
 
 export const name = Events.InteractionCreate;
 export const once = false;
@@ -32,5 +34,15 @@ export async function execute(interaction: Interaction) {
     // Handle role select interactions
     if (interaction.isRoleSelectMenu()) {
         await handleRoleSelect(interaction);
+    }
+
+    // Handle user select interactions
+    if (interaction.isUserSelectMenu()) {
+        await handleUserSelect(interaction);
+    }
+
+    // Handle string select interactions
+    if (interaction.isStringSelectMenu()) {
+        await handleStringSelect(interaction);
     }
 }

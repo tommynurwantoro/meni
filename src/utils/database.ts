@@ -8,4 +8,5 @@ const sequelize = new Sequelize(process.env.DATABASE_URL!, {
   logging: false, // Set to console.log to see SQL queries
 });
 
+export { sequelize };
 export default sequelize;

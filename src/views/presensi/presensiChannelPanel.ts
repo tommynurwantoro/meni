@@ -27,7 +27,7 @@ export function createPresensiChannelPanel() {
     const buttonRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId('presensi_channel_back')
+                .setCustomId('presensi_back')
                 .setLabel('Back to Presensi Config')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⬅️')

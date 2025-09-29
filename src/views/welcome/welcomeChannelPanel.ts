@@ -27,7 +27,7 @@ export function createWelcomeChannelPanel() {
     const buttonRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId('welcome_channel_back')
+                .setCustomId('welcome_back')
                 .setLabel('Back to Welcome Config')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⬅️')

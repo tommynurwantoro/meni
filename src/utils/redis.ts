@@ -185,6 +185,70 @@ class RedisManager {
       return false;
     }
   }
+
+  /**
+   * Store temporary user data for thanks flow
+   */
+  async storeThanksData(userId: string, guildId: string, data: any): Promise<void> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot store thanks data');
+        return;
+      }
+      
+      const key = `thanks_temp:${guildId}:${userId}`;
+      const value = JSON.stringify(data);
+      
+      // Store with 10 minute expiration
+      await this.client!.setEx(key, 600, value);
+      console.log(`Stored thanks data for user ${userId} in guild ${guildId}`);
+    } catch (error) {
+      console.error('Error storing thanks data:', error);
+    }
+  }
+
+  /**
+   * Get temporary user data for thanks flow
+   */
+  async getThanksData(userId: string, guildId: string): Promise<any | null> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot get thanks data');
+        return null;
+      }
+      
+      const key = `thanks_temp:${guildId}:${userId}`;
+      const value = await this.client!.get(key);
+      
+      if (!value) {
+        console.log(`No thanks data found for user ${userId} in guild ${guildId}`);
+        return null;
+      }
+
+      return JSON.parse(value);
+    } catch (error) {
+      console.error('Error getting thanks data:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear temporary user data for thanks flow
+   */
+  async clearThanksData(userId: string, guildId: string): Promise<void> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot clear thanks data');
+        return;
+      }
+      
+      const key = `thanks_temp:${guildId}:${userId}`;
+      await this.client!.del(key);
+      console.log(`Cleared thanks data for user ${userId} in guild ${guildId}`);
+    } catch (error) {
+      console.error('Error clearing thanks data:', error);
+    }
+  }
 }
 
 // Export singleton instance

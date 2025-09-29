@@ -1,13 +1,11 @@
-import {
-  ModalSubmitInteraction,
-  MessageFlags,
-} from "discord.js";
-import { Op } from "sequelize";
+import { ModalSubmitInteraction, MessageFlags, EmbedBuilder } from "discord.js";
 import Review from "../models/Review";
 import { showMarketplaceStockPanel } from "../views/marketplace/marketplaceStockPanel";
 import { createLinkProtectionPanel } from "../views/moderation/linkProtectionPanel";
-import { ConfigManager } from "../utils/config";
-import { getReviewQueueData, sendReviewMessage, updateReviewMessage } from "../utils/reviewUtils";
+import { getReviewQueueData, updateReviewMessage } from "../utils/reviewUtils";
+import { addPoints, notifyThanksMessage } from "../utils/pointsUtils";
+import { PointsTransaction } from "../models/PointsTransaction";
+import { redisManager } from "../utils/redis";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
@@ -41,10 +39,12 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
     return;
   }
 
-  // Handle legacy modal types without message IDs
   switch (customId) {
     case "welcome_message_modal":
       await handleWelcomeMessageModal(interaction);
+      break;
+    case "thanks_reason_modal":
+      await handleThanksReasonModal(interaction);
       break;
     default:
       await interaction.reply({
@@ -525,4 +525,151 @@ async function handleDoneReviewModal(
       flags: MessageFlags.Ephemeral,
     });
   }
+}
+
+async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
+  const guildId = interaction.guildId;
+  if (!guildId) return;
+
+  // Get stored user data from Redis
+  const thanksData = await redisManager.getThanksData(
+    interaction.user.id,
+    guildId
+  );
+  if (!thanksData) {
+    await interaction.reply({
+      content: "❌ Thanks session expired. Please start over.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const reason = interaction.fields.getTextInputValue("thanks_reason");
+
+  // Get the selected user
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({
+      content: "❌ Guild not found.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const selectedUser = await guild.members
+    .fetch(thanksData.selectedUserId)
+    .catch(() => null);
+  if (!selectedUser) {
+    await interaction.reply({
+      content: "❌ Selected user not found.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  try {
+    // Add points to the selected user with category and reason
+    const result = await addPoints(
+      selectedUser.id,
+      guildId,
+      10, // Give 10 points for thanks
+      "thanks",
+      interaction.user.id,
+      thanksData.selectedCategory,
+      reason,
+      {
+        timestamp: new Date().toISOString(),
+        thanksGiver: interaction.user.displayName,
+        thanksReceiver: selectedUser.displayName,
+      }
+    );
+
+    if (result.success) {
+      const categoryInfo = getCategoryInfo(thanksData.selectedCategory);
+
+      const embed = new EmbedBuilder()
+        .setColor("#00ff00")
+        .setTitle("✅ Thanks Sent!")
+        .setDescription(`You gave thanks to **${selectedUser.displayName}**!`)
+        .addFields(
+          {
+            name: "Category",
+            value: `${categoryInfo.emoji} ${categoryInfo.label}`,
+            inline: true,
+          },
+          {
+            name: "Points Given",
+            value: "10 points",
+            inline: true,
+          },
+          {
+            name: "New Balance",
+            value: result.newBalance?.toString() || "Unknown",
+            inline: true,
+          },
+          {
+            name: "Reason",
+            value: reason,
+            inline: false,
+          }
+        )
+        .setFooter({ text: "Powered by BULLSTER" })
+        .setTimestamp();
+
+      await interaction.reply({
+        embeds: [embed],
+        components: [],
+        flags: MessageFlags.Ephemeral,
+      });
+
+      // Clear Redis data after successful completion
+      await redisManager.clearThanksData(interaction.user.id, guildId);
+
+      // Log the transaction
+      const transaction = await PointsTransaction.findOne({
+        where: {
+          from_user_id: interaction.user.id,
+          to_user_id: selectedUser.id,
+          guild_id: guildId,
+        },
+        order: [["created_at", "DESC"]],
+      });
+
+      if (transaction) {
+        await notifyThanksMessage(
+          interaction.client,
+          guildId,
+          transaction,
+        );
+      }
+    } else {
+      await interaction.reply({
+        content: `❌ ${result.message}`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  } catch (error) {
+    console.error("Error sending thanks:", error);
+    await interaction.reply({
+      content: "❌ An error occurred while sending thanks.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+}
+
+function getCategoryInfo(category: string) {
+  const categories = {
+    RUN: { emoji: "🏃", label: "Run" },
+    UNITY: { emoji: "🤝", label: "Unity" },
+    BRAVERY: { emoji: "💪", label: "Bravery" },
+    INTEGRITY: { emoji: "💚", label: "Integrity" },
+    CUSTOMER_ORIENTED: { emoji: "👥", label: "Customer Oriented" },
+  };
+
+  return (
+    categories[category as keyof typeof categories] || {
+      emoji: "⭐",
+      label: "General",
+    }
+  );
 }

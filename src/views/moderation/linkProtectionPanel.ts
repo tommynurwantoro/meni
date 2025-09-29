@@ -23,7 +23,7 @@ export function createLinkProtectionPanel(guildId: string) {
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('link_protection_back')
+                    .setCustomId('moderation_back')
                     .setLabel('Back to Moderation Config')
                     .setStyle(ButtonStyle.Secondary)
                     .setEmoji('⬅️')
@@ -87,7 +87,7 @@ export function createLinkProtectionPanel(guildId: string) {
     const backRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId('link_protection_back')
+                .setCustomId('moderation_back')
                 .setLabel('Back to Moderation Config')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⬅️')

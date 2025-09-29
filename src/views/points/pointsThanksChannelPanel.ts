@@ -33,7 +33,7 @@ export async function showPointsThanksChannelPanel(interaction: ButtonInteractio
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("thanks_channel_back")
+      .setCustomId("points_back")
       .setLabel("Back")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⬅️")

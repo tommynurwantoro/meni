@@ -17,9 +17,6 @@ export async function handleModerationButton(interaction: ButtonInteraction) {
         case 'moderation_link_protection':
             await handleModerationLinkProtection(interaction);
             break;
-        case 'moderation_back':
-            await handleModerationBack(interaction);
-            break;
         default:
             await interaction.reply({
                 content: '❌ Unknown moderation option',

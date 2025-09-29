@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import sequelize from './utils/database';
-import './models/Review';
+import { syncDatabase } from './models';
 import { initializeScheduler } from './utils/scheduler';
 import { redisManager } from './utils/redis';
 
@@ -113,7 +113,7 @@ const initializeBot = async () => {
     // Sync database
     try {
         await sequelize.authenticate();
-        await sequelize.sync();
+        await syncDatabase();
         console.log('✅ Database connected and synced');
     } catch (error) {
         console.error('❌ Database connection failed:', error);

@@ -33,7 +33,7 @@ export async function showPointsLogsChannelPanel(interaction: ButtonInteraction)
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("points_logs_channel_back")
+      .setCustomId("points_back")
       .setLabel("Back")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⬅️")

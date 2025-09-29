@@ -1,4 +1,4 @@
-import { ButtonInteraction, MessageFlags } from "discord.js";
+import { ButtonInteraction, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, UserSelectMenuInteraction } from "discord.js";
 import { handleConfigButton } from "./configButtonHandler";
 import { handleWelcomeButton } from "./welcomeButtonHandler";
 import { handleModerationButton } from "./moderationButtonHandler";
@@ -20,46 +20,12 @@ import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
 import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
 import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
 
-async function handlePointsSystemButtons(interaction: ButtonInteraction) {
-  const customId = interaction.customId;
-  
-  try {
-    switch (customId) {
-      case "send_thanks":
-        await interaction.reply({
-          content: "🙏 Send Thanks functionality will be implemented soon!",
-          flags: MessageFlags.Ephemeral,
-        });
-        break;
-        
-      case "check_balance":
-        await interaction.reply({
-          content: "💰 Check Balance functionality will be implemented soon!",
-          flags: MessageFlags.Ephemeral,
-        });
-        break;
-        
-      default:
-        await interaction.reply({
-          content: "❌ Unknown points system button",
-          flags: MessageFlags.Ephemeral,
-        });
-    }
-  } catch (error) {
-    console.error("Error handling points system button:", error);
-    await interaction.reply({
-      content: "❌ An error occurred while processing the request.",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-}
-
 export async function handleButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
 
   if (customId.startsWith("config_")) {
     await handleConfigButton(interaction);
-  } else if (customId.includes("_back") || customId.includes("_cancel")) {
+  } else if (customId.includes("_back")) {
     await handleBackButton(interaction);
   } else if (customId.startsWith("welcome_")) {
     await handleWelcomeButton(interaction);
@@ -82,8 +48,6 @@ export async function handleButton(interaction: ButtonInteraction) {
     await handleSholatButton(interaction);
   } else if (customId.startsWith("points_")) {
     await handlePointsButton(interaction);
-  } else if (customId === "send_thanks" || customId === "check_balance") {
-    await handlePointsSystemButtons(interaction);
   } else if (customId === "reset_confirm") {
     await handleResetConfirm(interaction);
   } else if (customId === "reset_back_to_panel") {
@@ -94,14 +58,11 @@ export async function handleButton(interaction: ButtonInteraction) {
 async function handleBackButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
 
-  if (
-    customId === "moderation_channel_back" ||
-    customId === "link_protection_back"
-  ) {
+  if (customId === "moderation_back") {
     await showModerationConfigPanel(interaction);
   }
 
-  if (customId === "welcome_channel_back") {
+  if (customId === "welcome_back") {
     await showWelcomeConfigPanel(interaction);
   }
 
@@ -113,27 +74,15 @@ async function handleBackButton(interaction: ButtonInteraction) {
     await showMarketplaceConfigPanel(interaction);
   }
 
-  if (customId === "presensi_channel_back" || customId === "presensi_role_back") {
+  if (customId === "presensi_back") {
     await showPresensiConfigPanel(interaction);
   }
 
-  if (customId === "sholat_channel_back" || customId === "sholat_role_back") {
+  if (customId === "sholat_back") {
     await showSholatConfigPanel(interaction);
   }
 
-  if (customId === "points_logs_channel_back" || customId === "thanks_channel_back") {
-    await showPointsConfigPanel(interaction);
-  }
-
-  if (
-    customId === "welcome_back" ||
-    customId === "points_back" ||
-    customId === "moderation_back" ||
-    customId === "presensi_back" ||
-    customId === "reset_cancel" ||
-    customId === "reset_back_to_panel" ||
-    customId === "main_back"
-  ) {
+  if (customId === "main_back") {
     // Return to main configuration panel
     await showMainConfigPanel(interaction);
   }

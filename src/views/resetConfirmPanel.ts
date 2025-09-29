@@ -19,7 +19,7 @@ export function createResetConfirmPanel() {
                 .setStyle(ButtonStyle.Danger)
                 .setEmoji('⚠️'),
             new ButtonBuilder()
-                .setCustomId('reset_cancel')
+                .setCustomId('main_back')
                 .setLabel('Cancel')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('❌')

@@ -31,7 +31,7 @@ export async function showSholatRolePanel(interaction: ButtonInteraction) {
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("sholat_role_back")
+      .setCustomId("sholat_back")
       .setLabel("Back")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⬅️")

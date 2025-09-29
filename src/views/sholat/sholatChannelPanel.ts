@@ -33,7 +33,7 @@ export async function showSholatChannelPanel(interaction: ButtonInteraction) {
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("sholat_channel_back")
+      .setCustomId("sholat_back")
       .setLabel("Back")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⬅️")
