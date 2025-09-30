@@ -11,11 +11,8 @@ export interface PointsResult {
 
 export interface UserBalance {
   points: number;
-  level: number;
-  experience: number;
   total_received: number;
   total_given: number;
-  rank?: number;
 }
 
 /**
@@ -33,8 +30,6 @@ export async function getOrCreateUser(discordId: string, guildId: string): Promi
       points: 0,
       total_received: 0,
       total_given: 0,
-      level: 1,
-      experience: 0,
     },
   });
 
@@ -94,15 +89,11 @@ export async function addPoints(
       metadata: metadata || null,
     });
 
-    // Check for level up
     const updatedRecipient = await recipient.reload();
-    const levelUpResult = await checkLevelUp(updatedRecipient);
 
     return {
       success: true,
-      message: levelUpResult.leveledUp 
-        ? `✅ ${points} points added! 🎉 Level up! (Level ${levelUpResult.newLevel})`
-        : `✅ ${points} points added!`,
+      message: `✅ ${points} points added!`,
       newBalance: updatedRecipient.points,
     };
   } catch (error) {
@@ -194,21 +185,10 @@ export async function getUserBalance(discordId: string, guildId: string): Promis
       return null;
     }
 
-    // Get user's rank in guild
-    const rank = await PointsUser.count({
-      where: {
-        guild_id: guildId,
-        points: { [require('sequelize').Op.gt]: user.points },
-      },
-    }) + 1;
-
     return {
       points: user.points,
-      level: user.level,
-      experience: user.experience,
       total_received: user.total_received,
       total_given: user.total_given,
-      rank,
     };
   } catch (error) {
     console.error('Error getting user balance:', error);
@@ -230,25 +210,6 @@ export async function getLeaderboard(guildId: string, limit: number = 10): Promi
     console.error('Error getting leaderboard:', error);
     return [];
   }
-}
-
-/**
- * Check if user should level up
- */
-async function checkLevelUp(user: PointsUser): Promise<{ leveledUp: boolean; newLevel: number }> {
-  const currentLevel = user.level;
-  const experienceNeeded = currentLevel * 100; // 100 points per level
-
-  if (user.points >= experienceNeeded) {
-    const newLevel = Math.floor(user.points / 100) + 1;
-    await user.update({
-      level: newLevel,
-      experience: user.points % 100,
-    });
-    return { leveledUp: true, newLevel };
-  }
-
-  return { leveledUp: false, newLevel: currentLevel };
 }
 
 /**

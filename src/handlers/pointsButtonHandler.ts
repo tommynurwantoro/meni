@@ -14,6 +14,7 @@ import { showPointsThanksChannelPanel } from "../views/points/pointsThanksChanne
 import {
   getUserBalance,
 } from "../utils/pointsUtils";
+import { redisManager } from "../utils/redis";
 
 export async function handlePointsButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -141,7 +142,7 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
           .setStyle(ButtonStyle.Success)
           .setEmoji("🙏"),
         new ButtonBuilder()
-          .setCustomId("check_balance")
+          .setCustomId("points_check_balance")
           .setLabel("Check Balance")
           .setStyle(ButtonStyle.Success)
           .setEmoji("💰")
@@ -237,6 +238,7 @@ async function handleCheckBalance(interaction: ButtonInteraction) {
 
   try {
     const balance = await getUserBalance(userId, guildId);
+    const weeklyStats = await redisManager.getWeeklyThanksStats(userId, guildId);
 
     if (!balance) {
       await interaction.reply({
@@ -247,26 +249,30 @@ async function handleCheckBalance(interaction: ButtonInteraction) {
       return;
     }
 
+    // Get thanked users display names
+    let thankedUsersText = "None";
+    if (weeklyStats.thankedRecipients.length > 0) {
+      const guild = interaction.guild;
+      const thankedNames = [];
+      for (const recipientId of weeklyStats.thankedRecipients) {
+        try {
+          const member = await guild?.members.fetch(recipientId);
+          thankedNames.push(member?.displayName || `<@${recipientId}>`);
+        } catch {
+          thankedNames.push(`<@${recipientId}>`);
+        }
+      }
+      thankedUsersText = thankedNames.join(", ");
+      if (thankedUsersText.length > 1024) {
+        thankedUsersText = thankedUsersText.substring(0, 1020) + "...";
+      }
+    }
+
     const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("💰 Your Points Balance")
-      .setDescription(`Here's your current points information:`)
+      .setColor("#00ff00")
+      .setTitle("💰 Your Rubic Balance")
+      .setDescription(`**Total accumulated Rubic: ${balance.points}**\n\nHere's your current points information:`)
       .addFields(
-        {
-          name: "💎 Points",
-          value: balance.points.toString(),
-          inline: true,
-        },
-        {
-          name: "⭐ Level",
-          value: balance.level.toString(),
-          inline: true,
-        },
-        {
-          name: "📊 Rank",
-          value: `#${balance.rank}`,
-          inline: true,
-        },
         {
           name: "📈 Total Received",
           value: balance.total_received.toString(),
@@ -278,11 +284,27 @@ async function handleCheckBalance(interaction: ButtonInteraction) {
           inline: true,
         },
         {
-          name: "🎯 Experience",
-          value: `${balance.experience}/100`,
+          name: "🙏 Weekly Thanks Used",
+          value: `${weeklyStats.thanksUsed}/${weeklyStats.maxThanksPerWeek}`,
           inline: true,
+        },
+        {
+          name: "⏳ Thanks Remaining",
+          value: `${weeklyStats.thanksRemaining} left`,
+          inline: true,
+        },
+        {
+          name: "🔄 Resets",
+          value: `Every Monday`,
+          inline: true,
+        },
+        {
+          name: "👥 Thanked This Week",
+          value: thankedUsersText,
+          inline: false,
         }
       )
+      .setThumbnail(interaction.user.displayAvatarURL())
       .setFooter({ text: "Powered by BULLSTER" })
       .setTimestamp();
 

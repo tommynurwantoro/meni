@@ -249,6 +249,163 @@ class RedisManager {
       console.error('Error clearing thanks data:', error);
     }
   }
+
+  /**
+   * Get current week key (resets every Monday)
+   */
+  private getWeekKey(): string {
+    const now = new Date();
+    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = currentDay === 0 ? 6 : currentDay - 1; // Days since last Monday
+    
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysToMonday);
+    monday.setHours(0, 0, 0, 0);
+    
+    const year = monday.getFullYear();
+    const month = String(monday.getMonth() + 1).padStart(2, '0');
+    const day = String(monday.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Get user's weekly thanks count
+   */
+  async getWeeklyThanksCount(userId: string, guildId: string): Promise<number> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot get weekly thanks count');
+        return 0;
+      }
+      
+      const weekKey = this.getWeekKey();
+      const key = `thanks_weekly:${guildId}:${userId}:${weekKey}`;
+      const count = await this.client!.get(key);
+      
+      return count ? parseInt(count) : 0;
+    } catch (error) {
+      console.error('Error getting weekly thanks count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Increment user's weekly thanks count
+   */
+  async incrementWeeklyThanksCount(userId: string, guildId: string): Promise<number> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot increment weekly thanks count');
+        return 0;
+      }
+      
+      const weekKey = this.getWeekKey();
+      const key = `thanks_weekly:${guildId}:${userId}:${weekKey}`;
+      
+      // Increment and set expiry to next Monday + 1 day for safety
+      const newCount = await this.client!.incr(key);
+      
+      // Set expiry to 8 days (1 week + 1 day buffer)
+      await this.client!.expire(key, 8 * 24 * 60 * 60);
+      
+      return newCount;
+    } catch (error) {
+      console.error('Error incrementing weekly thanks count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Check if user has already thanked a specific recipient this week
+   */
+  async hasUserThankedRecipient(userId: string, recipientId: string, guildId: string): Promise<boolean> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot check recipient thanks');
+        return false;
+      }
+      
+      const weekKey = this.getWeekKey();
+      const key = `thanks_recipients:${guildId}:${userId}:${weekKey}`;
+      
+      const result = await this.client!.sIsMember(key, recipientId);
+      return result === 1;
+    } catch (error) {
+      console.error('Error checking recipient thanks:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Add recipient to user's weekly thanks list
+   */
+  async addThankedRecipient(userId: string, recipientId: string, guildId: string): Promise<void> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot add thanked recipient');
+        return;
+      }
+      
+      const weekKey = this.getWeekKey();
+      const key = `thanks_recipients:${guildId}:${userId}:${weekKey}`;
+      
+      // Add recipient to set
+      await this.client!.sAdd(key, recipientId);
+      
+      // Set expiry to 8 days (1 week + 1 day buffer)
+      await this.client!.expire(key, 8 * 24 * 60 * 60);
+      
+      console.log(`Added recipient ${recipientId} to user ${userId}'s weekly thanks list`);
+    } catch (error) {
+      console.error('Error adding thanked recipient:', error);
+    }
+  }
+
+  /**
+   * Get user's weekly thanks recipients
+   */
+  async getWeeklyThankedRecipients(userId: string, guildId: string): Promise<string[]> {
+    try {
+      if (!(await this.ensureConnected())) {
+        console.error('Redis not connected, cannot get weekly thanked recipients');
+        return [];
+      }
+      
+      const weekKey = this.getWeekKey();
+      const key = `thanks_recipients:${guildId}:${userId}:${weekKey}`;
+      
+      const recipients = await this.client!.sMembers(key);
+      return recipients;
+    } catch (error) {
+      console.error('Error getting weekly thanked recipients:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's weekly thanks stats
+   */
+  async getWeeklyThanksStats(userId: string, guildId: string): Promise<{
+    thanksUsed: number;
+    thanksRemaining: number;
+    maxThanksPerWeek: number;
+    thankedRecipients: string[];
+    weekStartDate: string;
+  }> {
+    const maxThanksPerWeek = 3;
+    const thanksUsed = await this.getWeeklyThanksCount(userId, guildId);
+    const thankedRecipients = await this.getWeeklyThankedRecipients(userId, guildId);
+    const weekKey = this.getWeekKey();
+    
+    return {
+      thanksUsed,
+      thanksRemaining: Math.max(0, maxThanksPerWeek - thanksUsed),
+      maxThanksPerWeek,
+      thankedRecipients,
+      weekStartDate: weekKey,
+    };
+  }
 }
 
 // Export singleton instance

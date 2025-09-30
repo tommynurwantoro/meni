@@ -568,6 +568,36 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
   }
 
   try {
+    // Check weekly thanks limits
+    const weeklyStats = await redisManager.getWeeklyThanksStats(interaction.user.id, guildId);
+    
+    if (weeklyStats.thanksRemaining <= 0) {
+      await interaction.reply({
+        content: `❌ You have reached your weekly thanks limit (${weeklyStats.maxThanksPerWeek}/week). Resets every Monday.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      // Clear Redis data on failure
+      await redisManager.clearThanksData(interaction.user.id, guildId);
+      return;
+    }
+
+    // Check if user has already thanked this recipient this week
+    const hasAlreadyThanked = await redisManager.hasUserThankedRecipient(
+      interaction.user.id,
+      thanksData.selectedUserId,
+      guildId
+    );
+
+    if (hasAlreadyThanked) {
+      await interaction.reply({
+        content: `❌ You have already thanked **${selectedUser.displayName}** this week. You can thank the same person again next Monday.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      // Clear Redis data on failure
+      await redisManager.clearThanksData(interaction.user.id, guildId);
+      return;
+    }
+
     // Add points to the selected user with category and reason
     const result = await addPoints(
       selectedUser.id,
@@ -585,6 +615,13 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
     );
 
     if (result.success) {
+      // Update weekly counters
+      await redisManager.incrementWeeklyThanksCount(interaction.user.id, guildId);
+      await redisManager.addThankedRecipient(interaction.user.id, thanksData.selectedUserId, guildId);
+      
+      // Get updated weekly stats for display
+      const updatedWeeklyStats = await redisManager.getWeeklyThanksStats(interaction.user.id, guildId);
+      
       const categoryInfo = getCategoryInfo(thanksData.selectedCategory);
 
       const embed = new EmbedBuilder()
@@ -605,6 +642,21 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
           {
             name: "New Balance",
             value: result.newBalance?.toString() || "Unknown",
+            inline: true,
+          },
+          {
+            name: "Weekly Thanks",
+            value: `${updatedWeeklyStats.thanksUsed}/${updatedWeeklyStats.maxThanksPerWeek} used`,
+            inline: true,
+          },
+          {
+            name: "Remaining This Week",
+            value: `${updatedWeeklyStats.thanksRemaining} left`,
+            inline: true,
+          },
+          {
+            name: "Resets",
+            value: "Every Monday",
             inline: true,
           },
           {

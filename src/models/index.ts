@@ -45,8 +45,8 @@ PointsTransaction.belongsTo(PointsUser, {
 // Sync database
 export async function syncDatabase() {
   try {
-    // Force recreate tables to avoid type conflicts
-    await sequelize.sync({ force: true });
+    // Alter existing tables instead of recreating them
+    await sequelize.sync({ alter: true });
     console.log('✅ Database models synchronized successfully');
   } catch (error) {
     console.error('❌ Error synchronizing database models:', error);

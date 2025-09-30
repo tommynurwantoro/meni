@@ -8,14 +8,12 @@ export interface PointsUserAttributes {
   points: number;
   total_received: number;
   total_given: number;
-  level: number;
-  experience: number;
   last_active: Date;
   created_at: Date;
   updated_at: Date;
 }
 
-export interface PointsUserCreationAttributes extends Optional<PointsUserAttributes, 'id' | 'points' | 'total_received' | 'total_given' | 'level' | 'experience' | 'last_active' | 'created_at' | 'updated_at'> {}
+export interface PointsUserCreationAttributes extends Optional<PointsUserAttributes, 'id' | 'points' | 'total_received' | 'total_given' | 'last_active' | 'created_at' | 'updated_at'> {}
 
 export class PointsUser extends Model<PointsUserAttributes, PointsUserCreationAttributes> implements PointsUserAttributes {
   public id!: number;
@@ -24,8 +22,6 @@ export class PointsUser extends Model<PointsUserAttributes, PointsUserCreationAt
   public points!: number;
   public total_received!: number;
   public total_given!: number;
-  public level!: number;
-  public experience!: number;
   public last_active!: Date;
   public readonly created_at!: Date;
   public readonly updated_at!: Date;
@@ -57,16 +53,6 @@ PointsUser.init(
       allowNull: false,
     },
     total_given: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-      allowNull: false,
-    },
-    level: {
-      type: DataTypes.INTEGER,
-      defaultValue: 1,
-      allowNull: false,
-    },
-    experience: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
       allowNull: false,
