@@ -169,7 +169,7 @@ async function handleAddStockModal(
 
   try {
     const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
-    const stockConfig = currentConfig.points?.stock || [];
+    const stockConfig = currentConfig.points?.marketplace?.stock || [];
 
     // Check if stock with the same name already exists (case-insensitive)
     const stockExists = stockConfig.some(
@@ -189,17 +189,20 @@ async function handleAddStockModal(
       ...currentConfig,
       points: {
         ...currentConfig.points,
-        stock: [
-          ...stockConfig,
-          {
-            name: stockName,
-            description: descriptionInput,
-            price: Number(priceInput),
-            quantity: Number(quantityInput),
-            addedBy: interaction.user.id,
-            addedAt: new Date().toISOString(),
-          },
-        ],
+        marketplace: {
+          ...currentConfig.points?.marketplace,
+          stock: [
+            ...stockConfig,
+            {
+              name: stockName,
+              description: descriptionInput,
+              price: Number(priceInput),
+              quantity: Number(quantityInput),
+              addedBy: interaction.user.id,
+              addedAt: new Date().toISOString(),
+            },
+          ],
+        },
       },
     });
 
@@ -270,29 +273,34 @@ async function handleUpdateStockModal(
 
   try {
     const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
-    const stockConfig = currentConfig.points?.stock || [];
+    const stockConfig = currentConfig.points?.marketplace?.stock || [];
     let stockFound = false;
 
     ConfigManager.updateGuildConfig(guildId, {
       ...currentConfig,
       points: {
         ...currentConfig.points,
-        stock: stockConfig.map((stock) => {
-          if (stock.name.toLowerCase() === stockName.toLowerCase()) {
-            stockFound = true;
-            // Only update fields if the input is not an empty string
-            return {
-              ...stock,
-              name: stockName, // Always update name, since it's the identifier
-              description:
-                descriptionInput !== "" ? descriptionInput : stock.description,
-              price: priceInput !== "" ? Number(priceInput) : stock.price,
-              quantity:
-                quantityInput !== "" ? Number(quantityInput) : stock.quantity,
-            };
-          }
-          return stock;
-        }),
+        marketplace: {
+          ...currentConfig.points?.marketplace,
+          stock: stockConfig.map((stock) => {
+            if (stock.name.toLowerCase() === stockName.toLowerCase()) {
+              stockFound = true;
+              // Only update fields if the input is not an empty string
+              return {
+                ...stock,
+                name: stockName, // Always update name, since it's the identifier
+                description:
+                  descriptionInput !== ""
+                    ? descriptionInput
+                    : stock.description,
+                price: priceInput !== "" ? Number(priceInput) : stock.price,
+                quantity:
+                  quantityInput !== "" ? Number(quantityInput) : stock.quantity,
+              };
+            }
+            return stock;
+          }),
+        },
       },
     });
 
@@ -366,7 +374,7 @@ async function handleRemoveStockModal(
 
   try {
     const currentConfig = ConfigManager.getGuildConfig(guildId) || {};
-    const stockConfig = currentConfig.points?.stock || [];
+    const stockConfig = currentConfig.points?.marketplace?.stock || [];
     const stockIndex = stockConfig.findIndex(
       (stock) => stock.name.toLowerCase() === stockName.toLowerCase()
     );
@@ -379,7 +387,10 @@ async function handleRemoveStockModal(
         ...currentConfig,
         points: {
           ...currentConfig.points,
-          stock: updatedStock,
+          marketplace: {
+            ...currentConfig.points?.marketplace,
+            stock: updatedStock,
+          },
         },
       });
 
@@ -569,8 +580,11 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
 
   try {
     // Check weekly thanks limits
-    const weeklyStats = await redisManager.getWeeklyThanksStats(interaction.user.id, guildId);
-    
+    const weeklyStats = await redisManager.getWeeklyThanksStats(
+      interaction.user.id,
+      guildId
+    );
+
     if (weeklyStats.thanksRemaining <= 0) {
       await interaction.reply({
         content: `❌ You have reached your weekly thanks limit (${weeklyStats.maxThanksPerWeek}/week). Resets every Monday.`,
@@ -616,12 +630,22 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
 
     if (result.success) {
       // Update weekly counters
-      await redisManager.incrementWeeklyThanksCount(interaction.user.id, guildId);
-      await redisManager.addThankedRecipient(interaction.user.id, thanksData.selectedUserId, guildId);
-      
+      await redisManager.incrementWeeklyThanksCount(
+        interaction.user.id,
+        guildId
+      );
+      await redisManager.addThankedRecipient(
+        interaction.user.id,
+        thanksData.selectedUserId,
+        guildId
+      );
+
       // Get updated weekly stats for display
-      const updatedWeeklyStats = await redisManager.getWeeklyThanksStats(interaction.user.id, guildId);
-      
+      const updatedWeeklyStats = await redisManager.getWeeklyThanksStats(
+        interaction.user.id,
+        guildId
+      );
+
       const categoryInfo = getCategoryInfo(thanksData.selectedCategory);
 
       const embed = new EmbedBuilder()
@@ -688,11 +712,7 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
       });
 
       if (transaction) {
-        await notifyThanksMessage(
-          interaction.client,
-          guildId,
-          transaction,
-        );
+        await notifyThanksMessage(interaction.client, guildId, transaction);
       }
     } else {
       await interaction.reply({

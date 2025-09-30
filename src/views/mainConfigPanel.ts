@@ -57,10 +57,10 @@ export async function createMainConfigPanel(
       },
       {
         name: "💰 Marketplace Feature",
-        value: config?.points?.marketplaceChannel
+        value: config?.points?.marketplace?.channel
           ? `
                     ✅ Configured
-                    Channel: <#${config.points.marketplaceChannel}>`
+                    Channel: <#${config.points.marketplace.channel}>`
           : "❌ Not configured",
         inline: false,
       },
@@ -127,7 +127,7 @@ export async function createMainConfigPanel(
       .setCustomId("config_marketplace")
       .setLabel("Marketplace Feature")
       .setStyle(
-        config?.points?.marketplaceChannel
+        config?.points?.marketplace?.enabled
           ? ButtonStyle.Success
           : config?.points?.logsChannel
           ? ButtonStyle.Primary

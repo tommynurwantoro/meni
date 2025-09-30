@@ -1,102 +1,102 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, ButtonInteraction, ChannelSelectMenuInteraction, ModalSubmitInteraction, MessageFlags } from 'discord.js';
-import { ConfigManager } from '../../utils/config';
+import {
+  ButtonInteraction,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from "discord.js";
+import { ConfigManager } from "../../utils/config";
 
-export function createMarketplaceConfigPanel(guildId: string) {
-    const config = ConfigManager.getGuildConfig(guildId);
-    const hasMarketplaceChannel = !!config?.points?.marketplaceChannel;
-    const stockCount = config?.points?.stock?.length || 0;
+export async function createMarketplaceConfigPanel(guildId: string) {
+  if (!guildId) return null;
 
-    const embed = new EmbedBuilder()
-        .setColor(hasMarketplaceChannel ? '#00ff00' : '#ff0000')
-        .setTitle('💰 Marketplace Configuration')
-        .setDescription('Configure the marketplace system for your server.')
-        .addFields(
-            {
-                name: '🔄 Current Status',
-                value: hasMarketplaceChannel
-                    ? '✅ **ENABLED** - Marketplace is active'
-                    : '❌ **DISABLED** - Marketplace is inactive',
-                inline: false
-            },
-            {
-                name: '📋 Marketplace Channel',
-                value: hasMarketplaceChannel
-                    ? `✅ Channel: <#${config?.points?.marketplaceChannel}>`
-                    : '❌ No channel selected',
-                inline: false
-            },
-            {
-                name: '📦 Available Stock',
-                value: stockCount > 0
-                    ? `✅ ${stockCount} items available`
-                    : '❌ No stock items configured',
-                inline: false
-            }
-        )
-        .setFooter({ text: 'Powered by BULLSTER' });
+  const config = ConfigManager.getGuildConfig(guildId);
+  const pointsConfig = config?.points;
 
-    const row1a = new ActionRowBuilder()
-        .addComponents(
-            new ChannelSelectMenuBuilder()
-                .setCustomId('marketplace_channel_select')
-                .setPlaceholder('Select channel for marketplace')
-                .setChannelTypes(ChannelType.GuildText)
-                .setMinValues(1)
-                .setMaxValues(1)
-        );
+  const configEmbed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle("🏦 Marketplace System Configuration")
+    .setDescription(
+      "Configure the marketplace for your server.\n\n" +
+      "**Features:**\n" +
+      "• Marketplace channel for buying items\n" +
+      "• Marketplace stock for selling items\n\n" +
+      "**Current Configuration:**"
+    )
+    .addFields(
+      {
+        name: "📊 Marketplace Channel",
+        value: pointsConfig?.marketplace?.channel
+          ? `<#${pointsConfig.marketplace.channel}>`
+          : "❌ Not set",
+        inline: true,
+      },
+      {
+        name: "🔧 Status",
+        value: pointsConfig?.marketplace?.enabled ? "✅ Enabled" : "❌ Disabled",
+        inline: true,
+      }
+    )
+    .setFooter({ text: "Powered by BULLSTER" })
+    .setTimestamp();
 
-    const row1b = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('marketplace_disable')
-                .setLabel('Disable Marketplace Feature')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('❌'),
-            new ButtonBuilder()
-                .setCustomId('marketplace_stock')
-                .setLabel('Manage Stock')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('📦')
-                .setDisabled(!hasMarketplaceChannel)
-        );
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("marketplace_channel")
+      .setLabel("Set Marketplace Channel")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("📊"),
+    new ButtonBuilder()
+      .setCustomId("marketplace_stock")
+      .setLabel("Set Marketplace Stock")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("📦")
+      .setDisabled(!pointsConfig?.marketplace?.channel),
+    new ButtonBuilder()
+      .setCustomId("marketplace_send_panel")
+      .setLabel("Send Marketplace Panel")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("📢")
+      .setDisabled(!pointsConfig?.marketplace?.channel),
+  );
 
-    const row1 = !hasMarketplaceChannel ? row1a : row1b;
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("marketplace_toggle")
+      .setLabel(pointsConfig?.marketplace?.enabled ? "Disable" : "Enable")
+      .setStyle(pointsConfig?.marketplace?.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
+      .setEmoji(pointsConfig?.marketplace?.enabled ? "❌" : "✅")
+      .setDisabled(!pointsConfig?.marketplace?.channel),
+  );
 
-    const row2 = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('main_back')
-                .setLabel('Back to Configuration Panel')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️')
-        );
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("main_back")
+      .setLabel("Back to Main")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("⬅️")
+  );
 
-    return {
-        embed,
-        components: [row1, row2]
-    };
+  return {
+    embed: configEmbed,
+    components: [row1, row2, row3],
+  };
 }
 
-export async function showMarketplaceConfigPanel(interaction: ButtonInteraction | ChannelSelectMenuInteraction | ModalSubmitInteraction, additionalMessage?: string) {
-    if (!interaction.guildId) return;
-    const panel = createMarketplaceConfigPanel(interaction.guildId);
-    if (!panel) return;
+export async function showMarketplaceConfigPanel(
+  interaction: ButtonInteraction,
+  additionalMessage?: string
+) {
+  const panel = await createMarketplaceConfigPanel(interaction.guildId!);
+  if (!panel) return;
 
-    if (interaction.isModalSubmit()) {
-        // For modal submissions, we need to reply since we can't update
-        await interaction.reply({
-            content: additionalMessage || '',
-            embeds: [panel.embed],
-            components: [panel.components[0] as any, panel.components[1] as any],
-            flags: MessageFlags.Ephemeral
-        });
-    } else {
-        // For button and channel select interactions, we can update
-        await interaction.update({
-            content: additionalMessage || '',
-            embeds: [panel.embed],
-            components: [panel.components[0] as any, panel.components[1] as any]
-        });
-    }
+  await interaction.update({
+    content: additionalMessage || "",
+    embeds: [panel.embed],
+    components: [
+      panel.components[0] as any,
+      panel.components[1] as any,
+      panel.components[2] as any,
+    ],
+  });
 }
-

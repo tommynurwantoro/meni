@@ -10,15 +10,18 @@ export interface GuildConfig {
         logsChannel?: string;
         thanksChannel?: string;
         enabled?: boolean;
-        marketplaceChannel?: string;
-        stock?: Array<{
-            name: string;
-            description: string;
-            price: number;
-            quantity: number;
-            addedBy: string;
-            addedAt: string;
-        }>;
+        marketplace?: {
+            enabled?: boolean;
+            channel?: string;
+            stock?: Array<{
+                name: string;
+                description: string;
+                price: number;
+                quantity: number;
+                addedBy: string;
+                addedAt: string;
+            }>;
+        };
     };
     moderation?: {
         linkProtection?: boolean;

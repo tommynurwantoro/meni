@@ -105,7 +105,11 @@ async function handleResetConfirm(interaction: ButtonInteraction) {
         logsChannel: "",
         thanksChannel: "",
         enabled: false,
-        marketplaceChannel: "",
+        marketplace: {
+          enabled: false,
+          channel: "",
+          stock: [],
+        },
       },
       moderation: {
         linkProtection: false,

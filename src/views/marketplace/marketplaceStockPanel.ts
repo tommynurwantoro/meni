@@ -3,7 +3,7 @@ import { ConfigManager } from '../../utils/config';
 
 export function createMarketplaceStockPanel(guildId: string) {
     const config = ConfigManager.getGuildConfig(guildId);
-    const stockItems = config?.points?.stock || [];
+    const stockItems = config?.points?.marketplace?.stock || [];
 
     // list items in a list
     const itemList = stockItems.map((item) => `
