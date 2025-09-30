@@ -23,7 +23,7 @@ export function createMarketplaceStockPanel(guildId: string) {
                 inline: false
             }
         )
-        .setFooter({ text: 'Powered by BULLSTER' });
+        .setFooter({ text: 'Powered by MENI' });
 
     const actionRow = new ActionRowBuilder()
         .addComponents(

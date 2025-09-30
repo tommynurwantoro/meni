@@ -12,7 +12,7 @@ export function createPresensiChannelPanel() {
                 inline: false
             }
         )
-        .setFooter({ text: 'Powered by BULLSTER' });
+        .setFooter({ text: 'Powered by MENI' });
 
     const channelRow = new ActionRowBuilder()
         .addComponents(

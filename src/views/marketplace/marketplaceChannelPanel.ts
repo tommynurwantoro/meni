@@ -19,7 +19,7 @@ export async function showMarketplaceChannelPanel(interaction: ButtonInteraction
       "• Users can buy items from this channel\n" +
       "• Only enabled servers will have marketplace panel"
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const channelRow = new ActionRowBuilder().addComponents(

@@ -7,7 +7,7 @@ export function createWelcomeConfigPanel(guildId: string) {
         .setColor(config?.welcome?.channel ? '#00ff00' : '#ff0000')
         .setTitle('🎯 Welcome System Configuration')
         .setDescription('Click the buttons below to configure the welcome system')
-        .setFooter({ text: 'Powered by BULLSTER' });
+        .setFooter({ text: 'Powered by MENI' });
 
     const row = new ActionRowBuilder()
         .addComponents(

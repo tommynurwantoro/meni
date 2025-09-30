@@ -19,7 +19,7 @@ export async function showPointsLogsChannelPanel(interaction: ButtonInteraction)
       "• Users can see their points history and transactions\n" +
       "• Only enabled servers will have points logging"
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const channelRow = new ActionRowBuilder().addComponents(

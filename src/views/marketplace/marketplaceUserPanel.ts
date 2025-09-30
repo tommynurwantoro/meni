@@ -18,7 +18,7 @@ export function createMarketplaceUserPanel(guildId: string) {
       .setColor('#FFD700')
       .setTitle('🏪 Marketplace')
       .setDescription('❌ The marketplace is currently disabled.')
-      .setFooter({ text: 'Powered by BULLSTER' });
+      .setFooter({ text: 'Powered by MENI' });
 
     return {
       embed,
@@ -44,7 +44,7 @@ export function createMarketplaceUserPanel(guildId: string) {
     .setColor('#0000ff')
     .setTitle('Marketplace')
     .setDescription('Welcome to the marketplace! Browse available items and spend your points.\n\n🛍️ Available Items:\n'+itemsDisplay)
-    .setFooter({ text: 'Powered by BULLSTER' })
+    .setFooter({ text: 'Powered by MENI' })
     .setTimestamp();
 
   // Create components
@@ -139,7 +139,7 @@ export function createItemPurchaseConfirmation(guildId: string, itemIndex: numbe
         inline: true
       }
     )
-    .setFooter({ text: 'Powered by BULLSTER' })
+    .setFooter({ text: 'Powered by MENI' })
     .setTimestamp();
 
   const components = [];

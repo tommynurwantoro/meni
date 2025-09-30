@@ -19,7 +19,7 @@ export async function execute(member: GuildMember) {
             { name: '📅 Joined Discord', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
             { name: '🎯 Server Member Count', value: `${member.guild.memberCount}`, inline: true }
         )
-        .setFooter({ text: `Powered by BULLSTER` })
+        .setFooter({ text: `Powered by MENI` })
         .setTimestamp();
 
     // Send to configured welcome channel

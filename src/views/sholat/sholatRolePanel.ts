@@ -18,7 +18,7 @@ export async function showSholatRolePanel(interaction: ButtonInteraction) {
         "• Choose a role that includes all Muslims in your server\n" +
         "• You can create a specific role for prayer reminders"
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const roleRow = new ActionRowBuilder().addComponents(

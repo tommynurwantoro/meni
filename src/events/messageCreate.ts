@@ -50,7 +50,7 @@ export async function execute(message: Message) {
             title: '🔗 Link Protection Alert',
             description: `**Message from ${message.author} was removed due to link protection.**`,
             footer: {
-                text: 'Powered by BULLSTER'
+                text: 'Powered by MENI'
             },
             timestamp: new Date().toISOString()
         };
@@ -100,7 +100,7 @@ export async function execute(message: Message) {
                             }
                         ],
                         footer: {
-                            text: 'Powered by BULLSTER - Link Protection'
+                            text: 'Powered by MENI - Link Protection'
                         },
                         timestamp: new Date().toISOString()
                     };

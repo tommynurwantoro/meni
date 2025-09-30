@@ -45,7 +45,7 @@ export async function createPresensiConfigPanel(guildId: string) {
         inline: true,
       }
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(

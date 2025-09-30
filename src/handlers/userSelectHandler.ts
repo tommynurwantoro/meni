@@ -49,7 +49,7 @@ async function handleThanksUserSelect(
       .setColor("#FFD700")
       .setTitle("🙏 Select Thanks Category")
       .setDescription(`You're giving thanks to **${selectedUser.displayName}**\n\nPlease select a category for this thanks:`)
-      .setFooter({ text: "Powered by BULLSTER" })
+      .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
     const categorySelect = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(

@@ -518,6 +518,13 @@ async function handleDoneReviewModal(
     if (review.total_pending === 0) {
       await review.destroy();
     }
+    
+    // send new message to reviewer
+    if (interaction.channel && "send" in interaction.channel) {
+    await interaction.channel?.send({
+        content: `<@${review.reporter}> -- **${review.title}** has been marked as done by <@${interaction.user.id}>`,
+      });
+    }
 
     // Get updated review queue data using centralized function
     const reviewData = await getReviewQueueData(guildId);
@@ -689,7 +696,7 @@ async function handleThanksReasonModal(interaction: ModalSubmitInteraction) {
             inline: false,
           }
         )
-        .setFooter({ text: "Powered by BULLSTER" })
+        .setFooter({ text: "Powered by MENI" })
         .setTimestamp();
 
       await interaction.reply({

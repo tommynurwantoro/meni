@@ -24,7 +24,7 @@ export async function getReviewQueueData(guildId: string): Promise<ReviewQueueDa
       guild_id: guildId,
     },
     order: [["created_at", "ASC"]],
-    limit: 10,
+    limit: 30,
   });
 
   // Collect all unique reviewer IDs for notifications
@@ -53,15 +53,15 @@ export async function getReviewQueueData(guildId: string): Promise<ReviewQueueDa
   // Create description
   const description = reviews.length > 0 
     ? "Reviewers can use command `/titip_review` to add new review or use button below to update the review status.\n\n**Need Review**\n" + queue 
-    : "No reviews in queue.";
+    : "No reviews in queue. Use command `/titip_review` to add new review";
 
   // Create embed
   const embed = new EmbedBuilder()
     .setColor("#00ff00")
-    .setTitle("📋 Antrian Review (Top 10)")
+    .setTitle("📋 Antrian Review")
     .setDescription(description)
     .setFooter({
-      text: "Powered by BULLSTER",
+      text: "Powered by MENI",
     })
     .setTimestamp();
 
@@ -119,7 +119,7 @@ export async function sendReviewMessage(
 ): Promise<void> {
   if (channel && "send" in channel) {
     const message = await channel.send({
-      content: "Need review from: " + reviewData.reviewerMentions,
+      content: reviewData.reviewerMentions.length > 0 ? "Need review from: " + reviewData.reviewerMentions : "",
       embeds: [reviewData.embed],
       components: [reviewData.actionRow],
     });

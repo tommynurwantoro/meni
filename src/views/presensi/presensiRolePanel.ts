@@ -12,7 +12,7 @@ export function createPresensiRolePanel() {
                 inline: false
             }
         )
-        .setFooter({ text: 'Powered by BULLSTER' });
+        .setFooter({ text: 'Powered by MENI' });
 
     const roleRow = new ActionRowBuilder()
         .addComponents(

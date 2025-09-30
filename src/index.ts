@@ -129,7 +129,7 @@ const initializeBot = async () => {
         console.log('⚠️ Continuing without Redis - some features may not work');
     }
 
-    // Load commands and events
+    // // Load commands and events
     await loadCommands();
     await loadEvents();
 
@@ -138,6 +138,7 @@ const initializeBot = async () => {
 
     // Initialize scheduler after login
     client.once(Events.ClientReady, () => {
+        console.log('✅ Bot is ready!');
         initializeScheduler(client);
     });
 };

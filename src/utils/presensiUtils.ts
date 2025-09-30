@@ -45,7 +45,7 @@ export async function sendPresensiReminder(
         `Jangan lupa untuk melakukan presensi ya! 🕐`
       )
       .setFooter({
-        text: "Powered by BULLSTER",
+        text: "Powered by MENI",
       })
       .setTimestamp();
 

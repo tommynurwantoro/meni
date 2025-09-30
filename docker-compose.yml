@@ -1,0 +1,77 @@
+services:
+  # Discord Bot Service
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meni-bot
+    restart: unless-stopped
+    environment:
+      # Discord Configuration
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      
+      # Database Configuration
+      - DATABASE_URL=postgres://meni:meni@postgres:5432/meni
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      
+      # Timezone
+      - TZ=Asia/Jakarta
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - meni-network
+    volumes:
+      # Mount config.json for persistent configuration
+      - ./config.json:/app/config.json
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: meni-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-meni}
+      - POSTGRES_USER=${DB_USER:-meni}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - meni-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-meni}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: meni-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - meni-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  meni-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local

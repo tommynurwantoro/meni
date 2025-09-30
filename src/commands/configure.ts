@@ -4,7 +4,7 @@ import { createMainConfigPanel } from '../views';
 export const data = new SlashCommandBuilder()
     .setName('configure')
     .setDescription('Open the bot configuration panel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
 export const cooldown = 5;
 

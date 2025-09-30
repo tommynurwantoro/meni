@@ -312,7 +312,7 @@ export async function notifyThanksMessage(
       .setColor("#00ff00")
       .setTitle("👍 Thanks Sent!")
       .setDescription(`<@${transaction.from_user_id}> barusan kasih ${transaction.points} rubic ke <@${transaction.to_user_id}>!`)
-      .setFooter({ text: "Powered by BULLSTER" })
+      .setFooter({ text: "Powered by MENI" })
       .addFields(
         {
           name: "Reason",

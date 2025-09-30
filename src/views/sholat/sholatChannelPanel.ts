@@ -19,7 +19,7 @@ export async function showSholatChannelPanel(interaction: ButtonInteraction) {
         "• Reminders are sent automatically based on prayer times\n" +
         "• Only enabled servers will receive reminders"
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const channelRow = new ActionRowBuilder().addComponents(

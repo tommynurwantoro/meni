@@ -118,7 +118,7 @@ async function handleWelcomeTest(interaction: ButtonInteraction) {
                 { name: '🎯 Server Member Count', value: `${interaction.guild?.memberCount}`, inline: true },
                 { name: '🧪 Test Mode', value: 'This is a test welcome message', inline: false }
             )
-            .setFooter({ text: `Powered by BULLSTER - Test by ${interaction.user.tag}` })
+            .setFooter({ text: `Powered by MENI - Test by ${interaction.user.tag}` })
             .setTimestamp();
 
         // Send the test welcome message to the configured channel

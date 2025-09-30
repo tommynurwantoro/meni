@@ -131,7 +131,7 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
             "• Points can be used in the marketplace\n\n" +
             "Use the buttons below to get started!"
         )
-        .setFooter({ text: "Powered by BULLSTER" })
+        .setFooter({ text: "Powered by MENI" })
         .setTimestamp();
 
       // Create buttons
@@ -305,7 +305,7 @@ async function handleCheckBalance(interaction: ButtonInteraction) {
         }
       )
       .setThumbnail(interaction.user.displayAvatarURL())
-      .setFooter({ text: "Powered by BULLSTER" })
+      .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
     await interaction.reply({

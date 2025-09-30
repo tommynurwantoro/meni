@@ -104,7 +104,7 @@ export async function sendSholatReminder(
         `Jangan lupa untuk melaksanakan sholat ya! 🤲`
       )
       .setFooter({
-        text: "Powered by BULLSTER",
+        text: "Powered by MENI",
       })
       .setTimestamp();
 

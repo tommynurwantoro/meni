@@ -19,7 +19,7 @@ export async function showPointsThanksChannelPanel(interaction: ButtonInteractio
       "• Users can give thanks to others in this channel\n" +
       "• Only enabled servers will have thanks panel"
     )
-    .setFooter({ text: "Powered by BULLSTER" })
+    .setFooter({ text: "Powered by MENI" })
     .setTimestamp();
 
   const channelRow = new ActionRowBuilder().addComponents(

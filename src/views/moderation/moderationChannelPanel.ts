@@ -17,7 +17,7 @@ export function createModerationChannelPanel() {
                 inline: false
             }
         )
-        .setFooter({ text: 'Powered by BULLSTER' });
+        .setFooter({ text: 'Powered by MENI' });
 
     const channelRow = new ActionRowBuilder()
         .addComponents(
