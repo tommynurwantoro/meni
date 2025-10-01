@@ -522,7 +522,7 @@ async function handleDoneReviewModal(
     // send new message to reviewer
     if (interaction.channel && "send" in interaction.channel) {
     await interaction.channel?.send({
-        content: `<@${review.reporter}> -- **${review.title}** has been marked as done by <@${interaction.user.id}>`,
+        content: `<@${review.reporter}> -- **[${review.title}](${review.url})** has been marked as done by <@${interaction.user.id}>`,
       });
     }
 
