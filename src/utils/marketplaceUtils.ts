@@ -119,7 +119,7 @@ export async function processPurchase(
         to_user_id: userId,
         guild_id: guildId,
         points: item.price,
-        transaction_type: "marketplace_purchase",
+        transaction_type: "purchase",
         category: "marketplace",
         reason: `Purchased ${item.name}`,
         metadata: {},

@@ -204,17 +204,9 @@ async function handleSendThanks(interaction: ButtonInteraction) {
         .setMaxValues(1)
     );
 
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("points_back")
-      .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji("❌")
-  );
-
   await interaction.reply({
     embeds: [embed],
-    components: [userSelect, buttonRow],
+    components: [userSelect],
     flags: MessageFlags.Ephemeral,
   });
 }

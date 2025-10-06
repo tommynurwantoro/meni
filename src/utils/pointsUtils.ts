@@ -235,7 +235,7 @@ export async function logPointsTransaction(
     if (!logsChannel || !logsChannel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
-      .setColor(transaction.points > 0 ? '#00ff00' : '#ff0000')
+      .setColor(transaction.transaction_type === 'purchase' ? '#fff700' : '#00ff00')
       .setTitle('💰 Points Transaction')
       .setDescription(`${transaction.points > 0 ? '+' : ''}${transaction.points} points`)
       .addFields(
@@ -311,7 +311,7 @@ export async function notifyThanksMessage(
     const embed = new EmbedBuilder()
       .setColor("#00ff00")
       .setTitle("👍 Thanks Sent!")
-      .setDescription(`<@${transaction.from_user_id}> barusan kasih ${transaction.points} rubic ke <@${transaction.to_user_id}>!`)
+      .setDescription(`[${transaction.category}] <@${transaction.from_user_id}> barusan kasih ${transaction.points} rubic ke <@${transaction.to_user_id}>!`)
       .setFooter({ text: "Powered by MENI" })
       .addFields(
         {
