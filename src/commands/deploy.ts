@@ -16,17 +16,11 @@ export const data = new SlashCommandBuilder()
     .addSubcommand(subcommand =>
         subcommand
             .setName('service')
-            .setDescription('Deploy a specific service')
+            .setDescription('Deploy a specific service interactively')
             .addIntegerOption(option =>
                 option
                     .setName('endpoint')
                     .setDescription('Portainer endpoint ID')
-                    .setRequired(true)
-            )
-            .addStringOption(option =>
-                option
-                    .setName('service')
-                    .setDescription('Service name to deploy')
                     .setRequired(true)
             )
     )
@@ -136,71 +130,164 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
 async function handleServiceDeploy(interaction: ChatInputCommandInteraction, client: any) {
     const endpointId = interaction.options.getInteger('endpoint', true);
-    const serviceName = interaction.options.getString('service', true);
 
     await interaction.deferReply();
 
-    const startEmbed = new EmbedBuilder()
-        .setColor(0xFFA500)
-        .setTitle('🚀 Starting Deployment')
-        .setDescription(`Deploying service: **${serviceName}**`)
-        .addFields(
-            { name: 'Endpoint', value: `${endpointId}`, inline: true },
-            { name: 'Status', value: '⏳ In Progress...', inline: true }
-        )
-        .setFooter({ text: 'Powered by MENI' })
-        .setTimestamp();
-
-    await interaction.editReply({ embeds: [startEmbed] });
-
     try {
-        const result = await client.deployService(endpointId, serviceName);
+        const services = await client.getServices(endpointId);
 
-        // Create success embed with pull results
-        const successEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle('✅ Deployment Successful')
-            .setDescription(result.message)
-            .addFields(
-                { name: 'Service', value: serviceName, inline: true },
-                { name: 'Endpoint', value: `${endpointId}`, inline: true }
-            )
+        if (services.length === 0) {
+            const noServicesEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('📋 Service Deployment')
+                .setDescription('No services found in this endpoint.')
+                .setFooter({ text: 'Powered by MENI' })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [noServicesEmbed] });
+            return;
+        }
+
+        // Sort services alphabetically by name
+        const sortedServices = services.sort((a: Service, b: Service) => 
+            a.Spec.Name.localeCompare(b.Spec.Name)
+        );
+
+        // Create select menu with up to 25 services (Discord limit)
+        const options = sortedServices.slice(0, 25).map((service: Service) => ({
+            label: service.Spec.Name,
+            value: service.Spec.Name,
+            description: service.Spec.TaskTemplate.ContainerSpec.Image.substring(0, 100)
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('service_select_single')
+            .setPlaceholder('Select a service to deploy')
+            .setMinValues(1)
+            .setMaxValues(1) // Only allow selecting one service
+            .addOptions(options);
+
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>()
+            .addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📋 Service Deployment')
+            .setDescription('Select a service to deploy:')
             .setFooter({ text: 'Powered by MENI' })
             .setTimestamp();
 
-        // Add node pull results with SHA digest
-        if (result.pullResults && result.pullResults.length > 0) {
-            const successfulPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'success');
-            const failedPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'failed');
-            
-            let pullResultsText = '';
-            
-            // Show successful pulls with digest info
-            if (successfulPulls.length > 0) {
-                pullResultsText += '✅ Success:\n';
-                successfulPulls.forEach((r: ImagePullProgress) => {
-                    const imageIdInfo = r.imageId ? `• Image ID: \`${r.imageId.slice(-12)}\`` : '';
-                    pullResultsText += `${imageIdInfo}\n`;
-                });
-            }
-            
-            // Show failed pulls
-            if (failedPulls.length > 0) {
-                pullResultsText += '❌ Failed:\n';
-                failedPulls.forEach((r: ImagePullProgress) => {
-                    pullResultsText += `• Node: ${r.node}: ${r.error || 'Unknown error'}\n`;
-                });
+        const message = await interaction.editReply({ 
+            embeds: [embed], 
+            components: [row] 
+        });
+
+        // Wait for selection
+        const collector = message.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
+            time: 60000 // 1 minute
+        });
+
+        collector.on('collect', async (i) => {
+            if (i.user.id !== interaction.user.id) {
+                await i.reply({ content: 'This menu is not for you!', ephemeral: true });
+                return;
             }
 
-            if (pullResultsText) {
-                successEmbed.addFields({
-                    name: '📦 Image Pull Results',
-                    value: pullResultsText.length > 1024 ? pullResultsText.substring(0, 1021) + '...' : pullResultsText
+            const serviceName = i.values[0];
+            
+            // Show starting embed
+            const startEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('🚀 Starting Deployment')
+                .setDescription(`Deploying service: **${serviceName}**`)
+                .addFields(
+                    { name: 'Endpoint', value: `${endpointId}`, inline: true },
+                    { name: 'Status', value: '⏳ In Progress...', inline: true }
+                )
+                .setFooter({ text: 'Powered by MENI' })
+                .setTimestamp();
+
+            await i.update({ 
+                embeds: [startEmbed], 
+                components: [] 
+            });
+
+            try {
+                const result = await client.deployService(endpointId, serviceName);
+
+                // Create success embed with pull results
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x00FF00)
+                    .setTitle('✅ Deployment Successful')
+                    .setDescription(result.message)
+                    .addFields(
+                        { name: 'Service', value: serviceName, inline: true },
+                        { name: 'Endpoint', value: `${endpointId}`, inline: true }
+                    )
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp();
+
+                // Add node pull results with SHA digest
+                if (result.pullResults && result.pullResults.length > 0) {
+                    const successfulPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'success');
+                    const failedPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'failed');
+                    
+                    let pullResultsText = '';
+                    
+                    // Show successful pulls with digest info
+                    if (successfulPulls.length > 0) {
+                        pullResultsText += '✅ Success:\n';
+                        successfulPulls.forEach((r: ImagePullProgress) => {
+                            const imageIdInfo = r.imageId ? `• Image ID: \`${r.imageId.slice(-12)}\`` : '';
+                            pullResultsText += `${imageIdInfo}\n`;
+                        });
+                    }
+                    
+                    // Show failed pulls
+                    if (failedPulls.length > 0) {
+                        pullResultsText += '❌ Failed:\n';
+                        failedPulls.forEach((r: ImagePullProgress) => {
+                            pullResultsText += `• Node: ${r.node}: ${r.error || 'Unknown error'}\n`;
+                        });
+                    }
+
+                    if (pullResultsText) {
+                        successEmbed.addFields({
+                            name: '📦 Image Pull Results',
+                            value: pullResultsText.length > 1024 ? pullResultsText.substring(0, 1021) + '...' : pullResultsText
+                        });
+                    }
+                }
+
+                await interaction.editReply({ embeds: [successEmbed] });
+            } catch (error: any) {
+                console.error('Service deploy error:', error);
+                
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('❌ Deployment Error')
+                    .setDescription(error.message || 'An unknown error occurred during deployment')
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp();
+                
+                await interaction.editReply({ embeds: [errorEmbed] });
+            }
+        });
+
+        collector.on('end', (collected) => {
+            if (collected.size === 0) {
+                interaction.editReply({ 
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('⏰ Timeout')
+                        .setDescription('Service selection timed out.')
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp()], 
+                    components: [] 
                 });
             }
-        }
-
-        await interaction.editReply({ embeds: [successEmbed] });
+        });
     } catch (error: any) {
         throw error;
     }
