@@ -6,6 +6,7 @@ import sequelize from './utils/database';
 import { syncDatabase } from './models';
 import { initializeScheduler } from './utils/scheduler';
 import { redisManager } from './utils/redis';
+import { initializePortainerClient } from './utils/portainerClient';
 
 // Extend Discord client with custom properties
 declare module 'discord.js' {
@@ -127,6 +128,41 @@ const initializeBot = async () => {
     } catch (error) {
         console.error('❌ Redis connection failed:', error);
         console.log('⚠️ Continuing without Redis - some features may not work');
+    }
+
+    // Initialize Portainer client if configured
+    if (process.env.PORTAINER_URL) {
+        try {
+            const config: any = {
+                url: process.env.PORTAINER_URL,
+                apiKey: process.env.PORTAINER_API_KEY,
+                username: process.env.PORTAINER_USERNAME,
+                password: process.env.PORTAINER_PASSWORD,
+            };
+
+            // Add ECR configuration if AWS region is provided
+            if (process.env.AWS_REGION) {
+                config.ecrConfig = {
+                    region: process.env.AWS_REGION,
+                    registryId: process.env.AWS_ECR_REGISTRY_ID, // Optional
+                };
+                console.log(`📦 ECR authentication enabled for region: ${process.env.AWS_REGION}`);
+            }
+
+            const portainerClient = initializePortainerClient(config);
+
+            // Authenticate if using username/password
+            if (!process.env.PORTAINER_API_KEY) {
+                await portainerClient.authenticate();
+            }
+
+            console.log('✅ Portainer client initialized');
+        } catch (error) {
+            console.error('❌ Portainer initialization failed:', error);
+            console.log('⚠️ Continuing without Portainer - deployment features will not work');
+        }
+    } else {
+        console.log('⚠️ PORTAINER_URL not configured - deployment features disabled');
     }
 
     // // Load commands and events

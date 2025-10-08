@@ -10,6 +10,7 @@ A powerful Discord bot built with TypeScript and Discord.js v14 to help with mem
 - **Points System**: Configurable points logging and marketplace channels
 - **Marketplace System**: Complete stock management with add/update/remove functionality
 - **Moderation Tools**: Link protection with whitelist support
+- **Portainer Integration**: Deploy Docker Swarm services directly from Discord
 - **Ping Command**: Bot latency testing
 - **Cooldown System**: Prevents command spam
 - **Error Handling**: Robust error handling and logging
@@ -38,9 +39,37 @@ A powerful Discord bot built with TypeScript and Discord.js v14 to help with mem
 Create a `.env` file in the root directory:
 
 ```env
+# Required Discord Configuration
 DISCORD_TOKEN=your_bot_token_here
-CLIENT_ID=your_bot_client_id_here
+DISCORD_CLIENT_ID=your_bot_client_id_here
+
+# Optional Portainer Configuration (for deployment features)
+PORTAINER_URL=https://your-portainer-instance.com
+PORTAINER_API_KEY=your_api_key_here
+
+# Alternative: Use username/password instead of API key
+# PORTAINER_USERNAME=your_username
+# PORTAINER_PASSWORD=your_password
+
+# AWS ECR Configuration (for automatic ECR authentication)
+# Required if deploying images from AWS ECR
+AWS_REGION=ap-southeast-1
+AWS_ECR_REGISTRY_ID=123456789012  # Optional, your AWS account ID
+
+# AWS Credentials (use AWS CLI configuration, environment variables, or IAM roles)
+# AWS_ACCESS_KEY_ID=your_aws_access_key_here
+# AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
+
+# Deploy Command Role Restriction (optional)
+# Only users with this role ID can use deploy commands
+# Leave empty to allow everyone
+DEPLOY_ROLE_ID=1234567890123456789
 ```
+
+**Note**: 
+- For Portainer integration, you can use either an API key (recommended) or username/password authentication. If both are provided, the API key takes precedence.
+- For ECR authentication, the bot will automatically fetch and refresh authentication tokens from AWS. Ensure AWS credentials are configured via AWS CLI, environment variables, or IAM roles.
+- For deploy command restriction, set `DEPLOY_ROLE_ID` to restrict access to users with a specific role. Leave empty to allow all users.
 
 ### 3. Bot Permissions
 
@@ -93,13 +122,63 @@ npm start
   - Moderation settings
   - Marketplace configuration
 
+### `/deploy` 🚀
+Deploy and manage Docker Swarm services through Portainer API.
+
+#### `/deploy service`
+- **Description**: Deploy a specific service with latest image
+- **Usage**: `/deploy service endpoint:1 service:my-service-name`
+- **Parameters**:
+  - `endpoint`: Portainer endpoint ID
+  - `service`: Name of the service to deploy
+- **What it does**:
+  1. Pulls the latest image with the same tag across all swarm nodes
+  2. Updates the service to use the latest image version
+  3. Provides detailed deployment status and node-by-node results
+
+#### `/deploy list`
+- **Description**: List all available services in an endpoint
+- **Usage**: `/deploy list endpoint:1`
+- **Parameters**:
+  - `endpoint`: Portainer endpoint ID
+- **Features**: Paginated list with service names and image tags
+
+#### `/deploy multi`
+- **Description**: Deploy multiple services interactively
+- **Usage**: `/deploy multi endpoint:1`
+- **Parameters**:
+  - `endpoint`: Portainer endpoint ID
+- **Features**: 
+  - Interactive service selection menu
+  - Deploy up to 25 services at once
+  - Detailed results for each service
+
+#### `/deploy status`
+- **Description**: Check Portainer connection status
+- **Usage**: `/deploy status`
+- **Features**: Shows connected endpoints and their types
+
+## 🐳 Portainer Integration
+
+This bot includes a powerful Portainer integration for deploying Docker Swarm services. For detailed setup instructions, see:
+
+📖 **[Portainer Setup Guide](PORTAINER_SETUP.md)**
+
+Quick start:
+1. Add Portainer credentials to `.env`
+2. Use `/deploy status` to verify connection
+3. Use `/deploy service` to deploy services
+
+For implementation details, see [Integration Summary](INTEGRATION_SUMMARY.md).
+
 ## 🏗️ Project Structure
 
 ```
 src/
 ├── commands/          # Bot commands
 │   ├── ping.ts       # Ping command
-│   └── configure.ts  # Configuration command
+│   ├── configure.ts  # Configuration command
+│   └── deploy.ts     # Portainer deployment command
 ├── events/            # Discord events
 │   ├── ready.ts      # Bot ready event
 │   ├── interactionCreate.ts  # Main interaction handler
@@ -123,7 +202,11 @@ src/
 │   ├── marketplaceStockPanel.ts  # Stock management panel
 │   └── marketplaceStockModal.ts  # Stock modals
 ├── utils/             # Utilities
-│   └── config.ts      # Configuration management
+│   ├── config.ts      # Configuration management
+│   ├── portainerClient.ts # Portainer API client
+│   ├── database.ts    # Database connection
+│   ├── redis.ts       # Redis client
+│   └── scheduler.ts   # Task scheduler
 ├── deploy-commands.ts # Command deployment script
 └── index.ts          # Main bot file
 ```
@@ -152,6 +235,16 @@ src/
 - **Item Details**: Name, description, price, quantity
 - **Real-time Updates**: Panel refreshes after changes
 - **Persistent Storage**: All data saved automatically
+
+### 🐳 Portainer Deployment System
+- **Docker Swarm Support**: Designed for multi-node swarm clusters
+- **Pre-pull Images**: Pulls images to all nodes before deployment
+- **Fast Deployments**: Pre-cached images enable instant service updates
+- **Multi-Service Support**: Deploy multiple services at once
+- **Interactive UI**: Discord-native buttons and select menus
+- **Detailed Logging**: Node-by-node status and results
+- **Flexible Authentication**: API key or username/password support
+- **AWS ECR Integration**: Automatic authentication token refresh for private ECR repositories
 
 ## 🔧 Development
 
