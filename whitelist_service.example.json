@@ -1,0 +1,11 @@
+{
+  "services": [
+    "example-service-api",
+    "example-service-web",
+    "example-service-worker",
+    "example-auth-service",
+    "example-cache-service"
+  ],
+  "description": "List of services that are allowed to be deployed via Discord bot. Copy this file to 'whitelist_service.json' and add your actual service names."
+}
+

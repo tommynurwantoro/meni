@@ -166,10 +166,61 @@ This bot includes a powerful Portainer integration for deploying Docker Swarm se
 
 Quick start:
 1. Add Portainer credentials to `.env`
-2. Use `/deploy status` to verify connection
-3. Use `/deploy service` to deploy services
+2. Create `whitelist_service.json` to control which services can be deployed
+3. Use `/deploy status` to verify connection
+4. Use `/deploy service` to deploy services
 
 For implementation details, see [Integration Summary](INTEGRATION_SUMMARY.md).
+
+### Whitelist Configuration
+
+#### Service Whitelist
+
+To control which services are available for deployment:
+
+1. Copy the example file:
+   ```bash
+   cp whitelist_service.example.json whitelist_service.json
+   ```
+
+2. Edit `whitelist_service.json` and add your service names:
+   ```json
+   {
+     "services": [
+       "my-api-service",
+       "my-web-service",
+       "my-worker-service"
+     ]
+   }
+   ```
+
+3. Only services in this list will appear in the deployment menu
+
+**Note**: If the file is missing or empty, all services will be shown.
+
+#### Endpoint Whitelist
+
+To control which Portainer endpoints can be used:
+
+1. Copy the example file:
+   ```bash
+   cp whitelist_endpoint.example.json whitelist_endpoint.json
+   ```
+
+2. Edit `whitelist_endpoint.json` and add your endpoint IDs:
+   ```json
+   {
+     "endpoints": [
+       1,
+       2,
+       3
+     ]
+   }
+   ```
+
+3. Only these endpoints will be accessible for deployment commands
+
+**Note**: If the file is missing or empty, all endpoints will be allowed. Users will get an "Access Denied" error if they try to use a non-whitelisted endpoint.
 
 ## 🏗️ Project Structure
 

@@ -9,6 +9,62 @@ import {
     ComponentType
 } from 'discord.js';
 import { getPortainerClient, ImagePullProgress, Service } from '../utils/portainerClient';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Load whitelist services
+function getWhitelistedServices(): string[] {
+    try {
+        const whitelistPath = join(process.cwd(), 'whitelist_service.json');
+        const whitelistData = readFileSync(whitelistPath, 'utf-8');
+        const whitelist = JSON.parse(whitelistData);
+        return whitelist.services || [];
+    } catch (error) {
+        console.warn('⚠️ Could not load whitelist_service.json, showing all services');
+        return [];
+    }
+}
+
+// Filter services based on whitelist
+function filterWhitelistedServices(services: Service[]): Service[] {
+    const whitelist = getWhitelistedServices();
+    
+    // If whitelist is empty or not loaded, return all services
+    if (whitelist.length === 0) {
+        return services;
+    }
+    
+    // Filter services that are in the whitelist
+    return services.filter((service: Service) => 
+        whitelist.includes(service.Spec.Name)
+    );
+}
+
+// Load whitelist endpoints
+function getWhitelistedEndpoints(): number[] {
+    try {
+        const whitelistPath = join(process.cwd(), 'whitelist_endpoint.json');
+        const whitelistData = readFileSync(whitelistPath, 'utf-8');
+        const whitelist = JSON.parse(whitelistData);
+        return whitelist.endpoints || [];
+    } catch (error) {
+        console.warn('⚠️ Could not load whitelist_endpoint.json, allowing all endpoints');
+        return [];
+    }
+}
+
+// Check if endpoint is whitelisted
+function isEndpointWhitelisted(endpointId: number): boolean {
+    const whitelist = getWhitelistedEndpoints();
+    
+    // If whitelist is empty or not loaded, allow all endpoints
+    if (whitelist.length === 0) {
+        return true;
+    }
+    
+    // Check if endpoint is in the whitelist
+    return whitelist.includes(endpointId);
+}
 
 export const data = new SlashCommandBuilder()
     .setName('deploy')
@@ -133,14 +189,30 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
 
     await interaction.deferReply();
 
+    // Validate endpoint is whitelisted
+    if (!isEndpointWhitelisted(endpointId)) {
+        const notAllowedEmbed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ Access Denied')
+            .setDescription(`Endpoint ID \`${endpointId}\` is not whitelisted for deployment.`)
+            .setFooter({ text: 'Contact admin to add this endpoint to the whitelist' })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [notAllowedEmbed] });
+        return;
+    }
+
     try {
-        const services = await client.getServices(endpointId);
+        const allServices = await client.getServices(endpointId);
+        
+        // Filter services based on whitelist
+        const services = filterWhitelistedServices(allServices);
 
         if (services.length === 0) {
             const noServicesEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('📋 Service Deployment')
-                .setDescription('No services found in this endpoint.')
+                .setDescription('No whitelisted services found in this endpoint.')
                 .setFooter({ text: 'Powered by MENI' })
                 .setTimestamp();
 
@@ -173,7 +245,7 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
         const embed = new EmbedBuilder()
             .setColor(0x0099FF)
             .setTitle('📋 Service Deployment')
-            .setDescription('Select a service to deploy:')
+            .setDescription('Select a service to deploy. If the service is not showing, please contact admin to add it to the whitelist.')
             .setFooter({ text: 'Powered by MENI' })
             .setTimestamp();
 
@@ -299,21 +371,37 @@ async function handleListServices(interaction: ChatInputCommandInteraction, clie
 
     await interaction.deferReply();
 
+    // Validate endpoint is whitelisted
+    if (!isEndpointWhitelisted(endpointId)) {
+        const notAllowedEmbed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ Access Denied')
+            .setDescription(`Endpoint ID \`${endpointId}\` is not whitelisted.`)
+            .setFooter({ text: 'Contact admin to add this endpoint to the whitelist' })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [notAllowedEmbed] });
+        return;
+    }
+
     try {
         const allServices = await client.getServices(endpointId);
         
-        // Filter services by search term if provided
+        // Filter services based on whitelist first
+        const whitelistedServices = filterWhitelistedServices(allServices);
+        
+        // Then filter by search term if provided
         const services = search 
-            ? allServices.filter((service: Service) => service.Spec.Name.toLowerCase().includes(search.toLowerCase()))
-            : allServices;
+            ? whitelistedServices.filter((service: Service) => service.Spec.Name.toLowerCase().includes(search.toLowerCase()))
+            : whitelistedServices;
 
         if (services.length === 0) {
             const noServicesEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('📋 Services List')
                 .setDescription(search 
-                    ? `No services found containing "${search}" in this endpoint.`
-                    : 'No services found in this endpoint.'
+                    ? `No whitelisted services found containing "${search}" in this endpoint.`
+                    : 'No whitelisted services found in this endpoint.'
                 )
                 .setFooter({ text: 'Powered by MENI' })
                 .setTimestamp();
@@ -429,14 +517,30 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
 
     await interaction.deferReply();
 
+    // Validate endpoint is whitelisted
+    if (!isEndpointWhitelisted(endpointId)) {
+        const notAllowedEmbed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ Access Denied')
+            .setDescription(`Endpoint ID \`${endpointId}\` is not whitelisted for deployment.`)
+            .setFooter({ text: 'Contact admin to add this endpoint to the whitelist' })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [notAllowedEmbed] });
+        return;
+    }
+
     try {
-        const services = await client.getServices(endpointId);
+        const allServices = await client.getServices(endpointId);
+        
+        // Filter services based on whitelist
+        const services = filterWhitelistedServices(allServices);
 
         if (services.length === 0) {
             const noServicesEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('📋 Multi-Service Deployment')
-                .setDescription('No services found in this endpoint.')
+                .setDescription('No whitelisted services found in this endpoint.')
                 .setFooter({ text: 'Powered by MENI' })
                 .setTimestamp();
 
@@ -469,7 +573,7 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
         const embed = new EmbedBuilder()
             .setColor(0x0099FF)
             .setTitle('📋 Multi-Service Deployment')
-            .setDescription('Select one or more services to deploy:')
+            .setDescription('Select one or more services to deploy. If the service is not showing, please contact admin to add it to the whitelist.')
             .setFooter({ text: 'Powered by MENI' })
             .setTimestamp();
 
@@ -621,7 +725,13 @@ async function handleStatus(interaction: ChatInputCommandInteraction, client: an
     await interaction.deferReply();
 
     try {
-        const endpoints = await client.getEndpoints();
+        const allEndpoints = await client.getEndpoints();
+        const whitelist = getWhitelistedEndpoints();
+
+        // Filter endpoints based on whitelist
+        const endpoints = whitelist.length > 0
+            ? allEndpoints.filter((ep: any) => whitelist.includes(ep.Id))
+            : allEndpoints;
 
         const embed = new EmbedBuilder()
             .setColor(0x00FF00)
@@ -635,9 +745,18 @@ async function handleStatus(interaction: ChatInputCommandInteraction, client: an
                 .map((ep: any) => `**${ep.Name}** (ID: ${ep.Id}) - ${ep.Type === 2 ? 'Docker Swarm' : 'Docker'}`)
                 .join('\n');
 
+            const fieldTitle = whitelist.length > 0 
+                ? `📡 Whitelisted Endpoints (${endpoints.length}/${allEndpoints.length})`
+                : `📡 Available Endpoints (${endpoints.length})`;
+
             embed.addFields({
-                name: `📡 Available Endpoints (${endpoints.length})`,
+                name: fieldTitle,
                 value: endpointsList.length > 1024 ? endpointsList.substring(0, 1021) + '...' : endpointsList
+            });
+        } else if (whitelist.length > 0 && endpoints.length === 0) {
+            embed.addFields({
+                name: '⚠️ No Whitelisted Endpoints Found',
+                value: 'None of the whitelisted endpoint IDs exist in Portainer.'
             });
         }
 
