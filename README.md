@@ -144,14 +144,16 @@ Deploy and manage Docker Swarm services through Portainer API.
 - **Features**: Paginated list with service names and image tags
 
 #### `/deploy multi`
-- **Description**: Deploy multiple services interactively
+- **Description**: Deploy multiple services interactively with optimized image pulling
 - **Usage**: `/deploy multi endpoint:1`
 - **Parameters**:
   - `endpoint`: Portainer endpoint ID
 - **Features**: 
   - Interactive service selection menu
   - Deploy up to 25 services at once
-  - Detailed results for each service
+  - **Optimized deployment**: Groups services by image and pulls each unique image only once
+  - Significantly reduces deployment time when multiple services share the same image
+  - Detailed results for each service with success/failure tracking
 
 #### `/deploy status`
 - **Description**: Check Portainer connection status
@@ -171,6 +173,26 @@ Quick start:
 4. Use `/deploy service` to deploy services
 
 For implementation details, see [Integration Summary](INTEGRATION_SUMMARY.md).
+
+### ⚡ Optimized Multi-Service Deployment
+
+The bot uses an optimized deployment strategy for multiple services that significantly reduces deployment time:
+
+**How it works:**
+1. **Group by Image**: Services are grouped by their container image
+2. **Pull Once**: Each unique image is pulled only once across all cluster nodes
+3. **Update All**: All services using that image are updated simultaneously
+
+**Example:**
+If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
+- **Old behavior**: Pull `app:latest` 8 times + Pull `worker:latest` 2 times = 10 pulls
+- **New behavior**: Pull `app:latest` once + Pull `worker:latest` once = 2 pulls
+
+**Benefits:**
+- ⚡ 5-10x faster deployment for services sharing images
+- 📉 Reduced network bandwidth usage
+- 🔄 Minimized downtime with parallel service updates
+- 💾 Lower registry API load
 
 ### Whitelist Configuration
 

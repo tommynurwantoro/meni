@@ -395,6 +395,123 @@ class PortainerClient {
     }
 
     /**
+     * Optimized deployment for multiple services:
+     * 1. Pull unique images once
+     * 2. Update all services that use those images
+     */
+    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[]): Promise<{
+        results: Array<{
+            serviceName: string;
+            success: boolean;
+            message: string;
+            pullResults?: ImagePullProgress[];
+        }>;
+        imagePullResults: Map<string, ImagePullProgress[]>;
+    }> {
+        const results: Array<{
+            serviceName: string;
+            success: boolean;
+            message: string;
+            pullResults?: ImagePullProgress[];
+        }> = [];
+        const imagePullResults = new Map<string, ImagePullProgress[]>();
+
+        try {
+            // Step 1: Get all services
+            console.log(`📋 Fetching ${serviceNames.length} service(s)...`);
+            const services = await Promise.all(
+                serviceNames.map(name => this.getServiceByName(endpointId, name))
+            );
+
+            // Check for missing services
+            const missingServices = serviceNames.filter((name, idx) => !services[idx]);
+            if (missingServices.length > 0) {
+                missingServices.forEach(name => {
+                    results.push({
+                        serviceName: name,
+                        success: false,
+                        message: `❌ Service "${name}" not found`,
+                    });
+                });
+            }
+
+            const validServices = services.filter((s): s is Service => s !== null);
+            if (validServices.length === 0) {
+                return { results, imagePullResults };
+            }
+
+            // Step 2: Group services by image
+            const servicesByImage = new Map<string, Service[]>();
+            validServices.forEach(service => {
+                const image = service.Spec.TaskTemplate.ContainerSpec.Image;
+                if (!servicesByImage.has(image)) {
+                    servicesByImage.set(image, []);
+                }
+                servicesByImage.get(image)!.push(service);
+            });
+
+            console.log(`📦 Found ${servicesByImage.size} unique image(s) to pull`);
+
+            // Step 3: Pull each unique image once
+            for (const [image, servicesUsingImage] of servicesByImage.entries()) {
+                console.log(`🔄 Pulling image for ${servicesUsingImage.length} service(s)...`);
+                try {
+                    const pullResults = await this.pullImageOnAllNodes(endpointId, image);
+                    imagePullResults.set(image, pullResults);
+
+                    // Check if pull was successful
+                    const successCount = pullResults.filter(r => r.status === 'success').length;
+                    if (successCount === 0) {
+                        // If image pull failed, mark all services using this image as failed
+                        servicesUsingImage.forEach(service => {
+                            results.push({
+                                serviceName: service.Spec.Name,
+                                success: false,
+                                message: `❌ Failed to pull image on any node`,
+                                pullResults,
+                            });
+                        });
+                        continue;
+                    }
+
+                    // Step 4: Update all services that use this image
+                    for (const service of servicesUsingImage) {
+                        try {
+                            await this.updateService(endpointId, service.ID, service);
+                            results.push({
+                                serviceName: service.Spec.Name,
+                                success: true,
+                                message: `✅ Successfully deployed ${service.Spec.Name}. Image pulled on ${successCount}/${pullResults.length} nodes.`,
+                                pullResults,
+                            });
+                        } catch (error: any) {
+                            results.push({
+                                serviceName: service.Spec.Name,
+                                success: false,
+                                message: `❌ ${error.message}`,
+                                pullResults,
+                            });
+                        }
+                    }
+                } catch (error: any) {
+                    // If pull fails, mark all services as failed
+                    servicesUsingImage.forEach(service => {
+                        results.push({
+                            serviceName: service.Spec.Name,
+                            success: false,
+                            message: `❌ Failed to pull image: ${error.message}`,
+                        });
+                    });
+                }
+            }
+
+            return { results, imagePullResults };
+        } catch (error: any) {
+            throw new Error(`Multi-deployment failed: ${error.message}`);
+        }
+    }
+
+    /**
      * Deploy multiple services
      */
     async deployMultipleServices(endpointId: number, serviceNames: string[]): Promise<{

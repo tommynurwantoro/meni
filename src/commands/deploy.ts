@@ -619,7 +619,7 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
             });
 
             try {
-                const results = await client.deployMultipleServices(endpointId, selectedServices);
+                const results = await client.deployMultipleServicesOptimized(endpointId, selectedServices);
                 
                 const successCount = results.results.filter((r: any) => r.success).length;
                 const failCount = results.results.length - successCount;
