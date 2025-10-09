@@ -17,6 +17,18 @@ services:
       # Redis Configuration
       - REDIS_URL=redis://redis:6379
       
+      # Portainer Configuration
+      - PORTAINER_URL=${PORTAINER_URL}
+      - PORTAINER_API_KEY=${PORTAINER_API_KEY}
+      
+      # AWS Configuration for ECR
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Deploy Role Configuration
+      - DEPLOY_ROLE_ID=${DEPLOY_ROLE_ID}
+      
       # Timezone
       - TZ=Asia/Jakarta
     depends_on:
@@ -29,6 +41,11 @@ services:
     volumes:
       # Mount config.json for persistent configuration
       - ./config.json:/app/config.json
+      # Mount docker socket for pulling images
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount whitelist files
+      - ./whitelist_service.json:/app/whitelist_service.json:ro
+      - ./whitelist_endpoint.json:/app/whitelist_endpoint.json:ro
 
   # PostgreSQL Database
   postgres:

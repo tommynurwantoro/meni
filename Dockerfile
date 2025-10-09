@@ -27,8 +27,8 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Install dumb-init and tzdata for timezone support
-RUN apk add --no-cache dumb-init tzdata
+# Install dumb-init, tzdata for timezone support, aws-cli and docker-cli
+RUN apk add --no-cache dumb-init tzdata aws-cli docker-cli
 
 # Set timezone to Asia/Jakarta
 ENV TZ=Asia/Jakarta
