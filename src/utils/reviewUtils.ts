@@ -45,7 +45,7 @@ export async function getReviewQueueData(guildId: string): Promise<ReviewQueueDa
               review.reporter
             }>\n\tReviewers: ${review.reviewer
               .map((id) => `<@${id}>`)
-              .join(", ")} (${review.total_pending} pending)`
+              .join(", ")} (${review.total_pending} pending)\n`
         )
         .join("\n")
     : "";
