@@ -310,9 +310,11 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
                     // Show successful pulls with digest info
                     if (successfulPulls.length > 0) {
                         pullResultsText += '✅ Success:\n';
-                        successfulPulls.forEach((r: ImagePullProgress) => {
+                        successfulPulls.forEach((r: ImagePullProgress, idx: number) => {
+                            pullResultsText += `--- Node ${idx + 1} ---\n`;
+                            const digest = r.digest ? `• Digest: \`${r.digest}\`` : '';
                             const imageIdInfo = r.imageId ? `• Image ID: \`${r.imageId.slice(-12)}\`` : '';
-                            pullResultsText += `${imageIdInfo}\n`;
+                            pullResultsText += `${digest}\n${imageIdInfo}\n`;
                         });
                     }
                     
@@ -657,14 +659,16 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
                         
                         // Get image ID from successful pull results
                         let imageIdInfo = '';
+                        let digestInfo = '';
                         if (result.pullResults) {
                             const successfulPull = result.pullResults.find((p: ImagePullProgress) => p.status === 'success' && p.imageId);
                             if (successfulPull && successfulPull.imageId) {
+                                digestInfo = `\n└ Digest: \`${successfulPull.digest}\``;
                                 imageIdInfo = `\n└ Image ID: \`${successfulPull.imageId.slice(-12)}\``;
                             }
                         }
                         
-                        successText += `✅ **${result.serviceName}**${pullInfo}${imageIdInfo}\n`;
+                        successText += `✅ **${result.serviceName}**${pullInfo}${digestInfo}${imageIdInfo}\n`;
                     });
                     
                     resultEmbed.addFields({
