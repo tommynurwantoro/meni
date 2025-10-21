@@ -352,11 +352,146 @@ class PortainerClient {
     }
 
     /**
-     * Main deployment workflow: pull image on all nodes and update service
+     * Get tasks for a specific service
      */
-    async deployService(endpointId: number, serviceName: string): Promise<{
+    async getServiceTasks(endpointId: number, serviceId: string): Promise<any[]> {
+        try {
+            const response = await this.client.get(`/api/endpoints/${endpointId}/docker/tasks`, {
+                params: {
+                    filters: JSON.stringify({
+                        service: [serviceId]
+                    })
+                }
+            });
+            return response.data;
+        } catch (error: any) {
+            throw new Error(`Failed to get service tasks: ${error.response?.data?.message || error.message}`);
+        }
+    }
+
+    /**
+     * Check service health after deployment
+     * Returns status of running tasks and any failures
+     */
+    async checkServiceHealth(endpointId: number, serviceName: string, timeoutMs: number = 60000): Promise<{
+        healthy: boolean;
+        status: string;
+        runningTasks: number;
+        desiredReplicas: number;
+        failedTasks: Array<{ node: string; error: string; state: string }>;
+        message: string;
+    }> {
+        const startTime = Date.now();
+        const pollInterval = 3000; // Check every 3 seconds
+
+        console.log(`🔍 Checking health for service: ${serviceName}`);
+
+        try {
+            const service = await this.getServiceByName(endpointId, serviceName);
+            if (!service) {
+                throw new Error(`Service "${serviceName}" not found`);
+            }
+
+            const desiredReplicas = (service.Spec as any).Mode?.Replicated?.Replicas || 1;
+
+            // Poll until timeout or service is healthy
+            while (Date.now() - startTime < timeoutMs) {
+                const tasks = await this.getServiceTasks(endpointId, service.ID);
+                
+                // Filter for the latest tasks (ignore old/shutdown tasks)
+                const runningTasks = tasks.filter((task: any) => task.Status.State === 'running');
+                const failedTasks = tasks.filter((task: any) => 
+                    task.Status.State === 'failed' || 
+                    task.Status.State === 'rejected'
+                );
+                const preparingTasks = tasks.filter((task: any) => 
+                    task.Status.State === 'preparing' || 
+                    task.Status.State === 'starting' ||
+                    task.Status.State === 'assigned'
+                );
+
+                console.log(`📊 Service status: ${runningTasks.length}/${desiredReplicas} running, ${preparingTasks.length} starting, ${failedTasks.length} failed`);
+
+                // Check if service is healthy (all replicas running)
+                if (runningTasks.length === desiredReplicas && failedTasks.length === 0) {
+                    return {
+                        healthy: true,
+                        status: 'running',
+                        runningTasks: runningTasks.length,
+                        desiredReplicas,
+                        failedTasks: [],
+                        message: `✅ Service is healthy. All ${desiredReplicas} replica(s) are running.`
+                    };
+                }
+
+                // Check for failed tasks
+                if (failedTasks.length > 0) {
+                    const failedTaskDetails = failedTasks.map((task: any) => ({
+                        node: task.NodeID || 'unknown',
+                        error: task.Status.Err || task.Status.Message || 'Unknown error',
+                        state: task.Status.State
+                    }));
+
+                    // If there are failed tasks but also running ones, it might still be deploying
+                    if (runningTasks.length < desiredReplicas && preparingTasks.length === 0) {
+                        return {
+                            healthy: false,
+                            status: 'failed',
+                            runningTasks: runningTasks.length,
+                            desiredReplicas,
+                            failedTasks: failedTaskDetails,
+                            message: `❌ Service deployment failed. ${runningTasks.length}/${desiredReplicas} running, ${failedTasks.length} failed.`
+                        };
+                    }
+                }
+
+                // Wait before next check
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+            }
+
+            // Timeout reached
+            const tasks = await this.getServiceTasks(endpointId, service.ID);
+            const runningTasks = tasks.filter((task: any) => task.Status.State === 'running');
+            const failedTasks = tasks.filter((task: any) => 
+                task.Status.State === 'failed' || 
+                task.Status.State === 'rejected'
+            );
+
+            const failedTaskDetails = failedTasks.map((task: any) => ({
+                node: task.NodeID || 'unknown',
+                error: task.Status.Err || task.Status.Message || 'Unknown error',
+                state: task.Status.State
+            }));
+
+            return {
+                healthy: false,
+                status: 'timeout',
+                runningTasks: runningTasks.length,
+                desiredReplicas,
+                failedTasks: failedTaskDetails,
+                message: `⏱️ Health check timeout. ${runningTasks.length}/${desiredReplicas} running after ${timeoutMs / 1000}s.`
+            };
+
+        } catch (error: any) {
+            console.error(`❌ Health check failed:`, error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Main deployment workflow: pull image on all nodes, update service, and check health
+     */
+    async deployService(endpointId: number, serviceName: string, checkHealth: boolean = true): Promise<{
         pullResults: ImagePullProgress[];
         serviceUpdated: boolean;
+        health?: {
+            healthy: boolean;
+            status: string;
+            runningTasks: number;
+            desiredReplicas: number;
+            failedTasks: Array<{ node: string; error: string; state: string }>;
+            message: string;
+        };
         message: string;
     }> {
         try {
@@ -381,12 +516,25 @@ class PortainerClient {
             // Step 2: Update the service
             await this.updateService(endpointId, service.ID, service);
 
+            // Step 3: Check service health (optional)
+            let health;
+            if (checkHealth) {
+                health = await this.checkServiceHealth(endpointId, serviceName, 60000); // 60 second timeout
+            }
+
             console.log(`🎉 Deployment complete: ${serviceName}`);
 
             return {
                 pullResults,
                 serviceUpdated: true,
-                message: `✅ Successfully deployed ${serviceName}. Image pulled on ${successCount}/${pullResults.length} nodes.`,
+                health,
+                message: health?.healthy 
+                    ? `✅ Successfully deployed ${serviceName}. Service is running healthy.`
+                    : health?.status === 'failed'
+                    ? `⚠️ Deployment completed but service failed to start properly.`
+                    : health?.status === 'timeout'
+                    ? `⚠️ Deployment completed but health check timed out.`
+                    : `✅ Successfully deployed ${serviceName}. Image pulled on ${successCount}/${pullResults.length} nodes.`,
             };
         } catch (error: any) {
             console.error(`❌ Deployment failed for ${serviceName}:`, error.message);
@@ -399,12 +547,20 @@ class PortainerClient {
      * 1. Pull unique images once
      * 2. Update all services that use those images
      */
-    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[]): Promise<{
+    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[], checkHealth: boolean = true): Promise<{
         results: Array<{
             serviceName: string;
             success: boolean;
             message: string;
             pullResults?: ImagePullProgress[];
+            health?: {
+                healthy: boolean;
+                status: string;
+                runningTasks: number;
+                desiredReplicas: number;
+                failedTasks: Array<{ node: string; error: string; state: string }>;
+                message: string;
+            };
         }>;
         imagePullResults: Map<string, ImagePullProgress[]>;
     }> {
@@ -413,6 +569,14 @@ class PortainerClient {
             success: boolean;
             message: string;
             pullResults?: ImagePullProgress[];
+            health?: {
+                healthy: boolean;
+                status: string;
+                runningTasks: number;
+                desiredReplicas: number;
+                failedTasks: Array<{ node: string; error: string; state: string }>;
+                message: string;
+            };
         }> = [];
         const imagePullResults = new Map<string, ImagePullProgress[]>();
 
@@ -478,11 +642,29 @@ class PortainerClient {
                     for (const service of servicesUsingImage) {
                         try {
                             await this.updateService(endpointId, service.ID, service);
+                            
+                            // Step 5: Check health if enabled
+                            let health;
+                            if (checkHealth) {
+                                try {
+                                    health = await this.checkServiceHealth(endpointId, service.Spec.Name, 60000);
+                                } catch (error: any) {
+                                    console.warn(`⚠️ Health check failed for ${service.Spec.Name}:`, error.message);
+                                }
+                            }
+                            
                             results.push({
                                 serviceName: service.Spec.Name,
                                 success: true,
-                                message: `✅ Successfully deployed ${service.Spec.Name}. Image pulled on ${successCount}/${pullResults.length} nodes.`,
+                                message: health?.healthy 
+                                    ? `✅ Successfully deployed and running healthy.`
+                                    : health?.status === 'failed'
+                                    ? `⚠️ Deployed but service failed to start.`
+                                    : health?.status === 'timeout'
+                                    ? `⚠️ Deployed but health check timed out.`
+                                    : `✅ Successfully deployed. Image pulled on ${successCount}/${pullResults.length} nodes.`,
                                 pullResults,
+                                health,
                             });
                         } catch (error: any) {
                             results.push({

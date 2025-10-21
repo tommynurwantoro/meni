@@ -288,10 +288,26 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
             try {
                 const result = await client.deployService(endpointId, serviceName);
 
+                // Determine embed color based on health status
+                let embedColor = 0x00FF00; // Green
+                let title = '✅ Deployment Successful';
+                
+                if (result.health) {
+                    if (!result.health.healthy) {
+                        if (result.health.status === 'failed') {
+                            embedColor = 0xFF0000; // Red
+                            title = '❌ Deployment Failed';
+                        } else if (result.health.status === 'timeout') {
+                            embedColor = 0xFFA500; // Orange
+                            title = '⚠️ Deployment Completed (Health Check Timeout)';
+                        }
+                    }
+                }
+
                 // Create success embed with pull results
                 const successEmbed = new EmbedBuilder()
-                    .setColor(0x00FF00)
-                    .setTitle('✅ Deployment Successful')
+                    .setColor(embedColor)
+                    .setTitle(title)
                     .setDescription(result.message)
                     .addFields(
                         { name: 'Service', value: serviceName, inline: true },
@@ -299,6 +315,30 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
                     )
                     .setFooter({ text: 'Powered by MENI' })
                     .setTimestamp();
+
+                // Add health status
+                if (result.health) {
+                    let healthStatus = '';
+                    if (result.health.healthy) {
+                        healthStatus = `✅ **Healthy** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
+                    } else if (result.health.status === 'failed') {
+                        healthStatus = `❌ **Failed** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
+                        
+                        if (result.health.failedTasks.length > 0) {
+                            healthStatus += '\n\n**Errors:**\n';
+                            result.health.failedTasks.slice(0, 3).forEach((task: any) => {
+                                healthStatus += `• ${task.error.substring(0, 100)}\n`;
+                            });
+                        }
+                    } else if (result.health.status === 'timeout') {
+                        healthStatus = `⏱️ **Timeout**\n${result.health.runningTasks}/${result.health.desiredReplicas} replicas running\n\nService is still starting up`;
+                    }
+                    
+                    successEmbed.addFields({
+                        name: '🏥 Service Health',
+                        value: healthStatus.substring(0, 1024)
+                    });
+                }
 
                 // Add node pull results with SHA digest
                 if (result.pullResults && result.pullResults.length > 0) {
@@ -657,6 +697,18 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
                             ? ` (${result.pullResults.filter((p: ImagePullProgress) => p.status === 'success').length}/${result.pullResults.length} nodes)`
                             : '';
                         
+                        // Get health status icon
+                        let healthIcon = '';
+                        if (result.health) {
+                            if (result.health.healthy) {
+                                healthIcon = ' 🟢';
+                            } else if (result.health.status === 'failed') {
+                                healthIcon = ' 🔴';
+                            } else if (result.health.status === 'timeout') {
+                                healthIcon = ' 🟡';
+                            }
+                        }
+                        
                         // Get image ID from successful pull results
                         let imageIdInfo = '';
                         let digestInfo = '';
@@ -668,7 +720,13 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
                             }
                         }
                         
-                        successText += `✅ **${result.serviceName}**${pullInfo}${digestInfo}${imageIdInfo}\n`;
+                        // Add health info
+                        let healthInfo = '';
+                        if (result.health) {
+                            healthInfo = `\n└ Health: ${result.health.runningTasks}/${result.health.desiredReplicas} running`;
+                        }
+                        
+                        successText += `✅ **${result.serviceName}**${healthIcon}${pullInfo}${digestInfo}${imageIdInfo}${healthInfo}\n`;
                     });
                     
                     resultEmbed.addFields({

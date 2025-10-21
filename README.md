@@ -126,15 +126,20 @@ npm start
 Deploy and manage Docker Swarm services through Portainer API.
 
 #### `/deploy service`
-- **Description**: Deploy a specific service with latest image
-- **Usage**: `/deploy service endpoint:1 service:my-service-name`
+- **Description**: Deploy a specific service with latest image and health verification
+- **Usage**: `/deploy service endpoint:1`
 - **Parameters**:
   - `endpoint`: Portainer endpoint ID
-  - `service`: Name of the service to deploy
 - **What it does**:
-  1. Pulls the latest image with the same tag across all swarm nodes
-  2. Updates the service to use the latest image version
-  3. Provides detailed deployment status and node-by-node results
+  1. Shows interactive menu to select a service
+  2. Pulls the latest image with the same tag across all swarm nodes
+  3. Updates the service to use the latest image version
+  4. **Monitors service health** for up to 60 seconds
+  5. Provides detailed deployment status with:
+     - Node-by-node pull results
+     - Service health status (running/failed/timeout)
+     - Task replica counts
+     - Error messages if deployment fails
 
 #### `/deploy list`
 - **Description**: List all available services in an endpoint
@@ -144,7 +149,7 @@ Deploy and manage Docker Swarm services through Portainer API.
 - **Features**: Paginated list with service names and image tags
 
 #### `/deploy multi`
-- **Description**: Deploy multiple services interactively with optimized image pulling
+- **Description**: Deploy multiple services interactively with optimized image pulling and health verification
 - **Usage**: `/deploy multi endpoint:1`
 - **Parameters**:
   - `endpoint`: Portainer endpoint ID
@@ -152,8 +157,10 @@ Deploy and manage Docker Swarm services through Portainer API.
   - Interactive service selection menu
   - Deploy up to 25 services at once
   - **Optimized deployment**: Groups services by image and pulls each unique image only once
+  - **Health monitoring**: Automatically checks each service after deployment
+  - Visual health indicators (🟢 healthy, 🟡 timeout, 🔴 failed)
   - Significantly reduces deployment time when multiple services share the same image
-  - Detailed results for each service with success/failure tracking
+  - Detailed results for each service with success/failure tracking and replica counts
 
 #### `/deploy status`
 - **Description**: Check Portainer connection status
@@ -182,6 +189,7 @@ The bot uses an optimized deployment strategy for multiple services that signifi
 1. **Group by Image**: Services are grouped by their container image
 2. **Pull Once**: Each unique image is pulled only once across all cluster nodes
 3. **Update All**: All services using that image are updated simultaneously
+4. **Health Check**: Automatically verifies each service is running properly
 
 **Example:**
 If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
@@ -193,6 +201,36 @@ If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
 - 📉 Reduced network bandwidth usage
 - 🔄 Minimized downtime with parallel service updates
 - 💾 Lower registry API load
+- ✅ Automatic health verification
+
+### 🏥 Automatic Health Monitoring
+
+After each deployment, the bot automatically monitors the service health to ensure it's running properly:
+
+**Health Check Process:**
+1. **Monitor Tasks**: Tracks Docker Swarm tasks for the service
+2. **Count Replicas**: Verifies all desired replicas are running
+3. **Detect Failures**: Identifies failed or rejected tasks
+4. **Timeout Handling**: Waits up to 60 seconds for service to stabilize
+
+**Health Status Indicators:**
+- 🟢 **Healthy**: All replicas are running successfully
+- 🟡 **Timeout**: Service is starting but not all replicas are ready yet
+- 🔴 **Failed**: Service failed to start (shows error messages)
+
+**What You See:**
+```
+✅ my-service 🟢 (2/2 nodes)
+└ Health: 3/3 running
+└ Image ID: abc123def456
+└ Digest: sha256:...
+```
+
+**Error Details:**
+If a service fails to start, you'll see:
+- Number of running vs desired replicas
+- Specific error messages from failed tasks
+- Node information for troubleshooting
 
 ### Whitelist Configuration
 
