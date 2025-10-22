@@ -413,7 +413,7 @@ class PortainerClient {
                 console.log(`📊 Service status: ${runningTasks.length}/${desiredReplicas} running, ${preparingTasks.length} starting, ${failedTasks.length} failed`);
 
                 // Check if service is healthy (all replicas running)
-                if (runningTasks.length === desiredReplicas && failedTasks.length === 0) {
+                if (runningTasks.length === desiredReplicas && preparingTasks.length === 0) {
                     return {
                         healthy: true,
                         status: 'running',
@@ -424,9 +424,12 @@ class PortainerClient {
                     };
                 }
 
+                // check if failed task is greater than 0 and timestamp is more than latest running task
+                const latestRunningTask = runningTasks.sort((a: any, b: any) => new Date(b.Status.Timestamp).getTime() - new Date(a.Status.Timestamp).getTime())[0];
+                const newFailedTasks = failedTasks.filter((task: any) => new Date(task.Status.Timestamp).getTime() > new Date(latestRunningTask.Status.Timestamp).getTime());
                 // Check for failed tasks
-                if (failedTasks.length > 0) {
-                    const failedTaskDetails = failedTasks.map((task: any) => ({
+                if (newFailedTasks.length > 0) {
+                    const failedTaskDetails = newFailedTasks.map((task: any) => ({
                         node: task.NodeID || 'unknown',
                         error: task.Status.Err || task.Status.Message || 'Unknown error',
                         state: task.Status.State
