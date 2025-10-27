@@ -6,4 +6,6 @@ node_modules/
 config.json
 .vscode/
 whitelist_service.json
+whitelist_service_dev.json
 whitelist_endpoint.json
+whitelist_endpoint_dev.json

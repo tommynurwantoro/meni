@@ -183,6 +183,22 @@ Deploy and manage Docker Swarm services through Portainer API.
   - Shows service description in dropdown
   - Requires GitLab configuration in `.env`
 
+#### `/deploy create-tag`
+- **Description**: Create a new tag for a service in GitLab
+- **Usage**: `/deploy create-tag`
+- **Features**:
+  - Interactive dropdown menu to select service from whitelist
+  - Modal form to input tag details:
+    - **Tag Name**: The name of the tag (e.g., `v1.0.0`)
+    - **Tag Message**: Description/message for the tag
+  - Automatically creates tag from `main` branch
+  - Shows created tag details (commit ID, author, creation date)
+  - **Edits the original message** to maintain history of who created the tag
+  - Shows loading state during tag creation
+  - Includes "Created By" field showing the Discord user who created the tag
+  - Requires GitLab configuration in `.env`
+  - Requires appropriate GitLab permissions to create tags
+
 ## 🐳 Portainer Integration
 
 This bot includes a powerful Portainer integration for deploying Docker Swarm services. For detailed setup instructions, see:

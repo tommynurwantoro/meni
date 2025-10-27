@@ -6,7 +6,10 @@ import {
     StringSelectMenuBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ComponentType
+    ComponentType,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } from 'discord.js';
 import { getPortainerClient, ImagePullProgress, Service } from '../utils/portainerClient';
 import { getGitLabClient } from '../utils/gitlabClient';
@@ -152,6 +155,11 @@ export const data = new SlashCommandBuilder()
         subcommand
             .setName('tags')
             .setDescription('Get latest 3 tags for a service from GitLab')
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('create-tag')
+            .setDescription('Create a new tag for a service in GitLab')
     );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -205,6 +213,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 break;
             case 'tags':
                 await handleGetTags(interaction);
+                break;
+            case 'create-tag':
+                await handleCreateTag(interaction);
                 break;
             case 'status':
                 await handleStatus(interaction, client);
@@ -1069,5 +1080,158 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
             .setTimestamp();
         
         await interaction.editReply({ embeds: [errorEmbed] });
+    }
+}
+
+/**
+ * Handle /deploy create-tag command
+ */
+async function handleCreateTag(interaction: ChatInputCommandInteraction) {
+    try {
+        // Get whitelisted services
+        const services = getWhitelistedServices();
+        
+        if (services.length === 0) {
+            const noServicesEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('📝 Create Tag')
+                .setDescription('No services found in whitelist configuration.')
+                .setFooter({ text: 'Contact admin to configure services' })
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [noServicesEmbed], ephemeral: true });
+            return;
+        }
+        
+        // Sort services alphabetically
+        const sortedServices = services.sort((a, b) => a.localeCompare(b));
+        
+        // Create select menu with services (up to 25 - Discord limit)
+        const options = sortedServices.slice(0, 25).map((service) => {
+            const config = getWhitelistConfig();
+            const description = config?.serviceMapping?.[service]?.description || 'No description';
+            
+            return {
+                label: service,
+                value: service,
+                description: description.substring(0, 100)
+            };
+        });
+        
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('create_tag_service_select')
+            .setPlaceholder('Select a service to create a tag for')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(options);
+        
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>()
+            .addComponents(selectMenu);
+        
+        const embed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📝 Create New Tag in GitLab')
+            .setDescription('Select a service to create a new tag for.')
+            .setFooter({ text: 'Powered by MENI' })
+            .setTimestamp();
+        
+        const message = await interaction.reply({ 
+            embeds: [embed], 
+            components: [row],
+            fetchReply: true
+        });
+        
+        // Wait for selection
+        const collector = message.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
+            time: 60000 // 1 minute
+        });
+        
+        collector.on('collect', async (i) => {
+            if (i.user.id !== interaction.user.id) {
+                await i.reply({ content: 'This menu is not for you!', ephemeral: true });
+                return;
+            }
+            
+            const serviceName = i.values[0];
+            
+            // Get GitLab project ID for the service
+            const projectId = getGitLabProjectId(serviceName);
+            if (!projectId) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('❌ Service Not Configured')
+                    .setDescription(`Service "${serviceName}" doesn't have a GitLab project ID mapping.`)
+                    .addFields(
+                        { name: 'Service', value: serviceName, inline: true }
+                    )
+                    .setFooter({ text: 'Contact admin to add GitLab project ID mapping' })
+                    .setTimestamp();
+                
+                await i.update({ embeds: [errorEmbed], components: [] });
+                return;
+            }
+            
+            // Create modal for tag details
+            const modal = new ModalBuilder()
+                .setCustomId(`create_tag_modal_${serviceName}_${projectId}`)
+                .setTitle(`Create Tag for ${serviceName}`);
+            
+            // Tag name input
+            const tagNameInput = new TextInputBuilder()
+                .setCustomId('tag_name')
+                .setLabel('Tag Name')
+                .setPlaceholder('e.g., v1.0.0')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(100);
+            
+            // Tag message input
+            const tagMessageInput = new TextInputBuilder()
+                .setCustomId('tag_message')
+                .setLabel('Tag Message')
+                .setPlaceholder('e.g., Release version 1.0.0 with new features')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setMaxLength(1000);
+            
+            // Add inputs to action rows
+            const firstActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(tagNameInput);
+            const secondActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(tagMessageInput);
+            
+            modal.addComponents(firstActionRow, secondActionRow);
+            
+            // Show the modal
+            await i.showModal(modal);
+        });
+        
+        collector.on('end', (collected) => {
+            if (collected.size === 0) {
+                interaction.editReply({ 
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('⏰ Timeout')
+                        .setDescription('Service selection timed out.')
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp()], 
+                    components: [] 
+                });
+            }
+        });
+    } catch (error: any) {
+        console.error('Create tag error:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ Failed to Initialize Tag Creation')
+            .setDescription(error.message || 'An unknown error occurred')
+            .setFooter({ text: 'Powered by MENI' })
+            .setTimestamp();
+        
+        if (interaction.replied || interaction.deferred) {
+            await interaction.editReply({ embeds: [errorEmbed], components: [] });
+        } else {
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        }
     }
 }

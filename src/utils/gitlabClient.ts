@@ -87,6 +87,22 @@ export class GitLabClient {
             throw new Error(`Failed to fetch project details: ${error.response?.data?.message || error.message}`);
         }
     }
+
+    /**
+     * Create a new tag
+     */
+    async createTag(projectId: string, tagName: string, ref: string, message: string): Promise<GitLabTag> {
+        try {
+            const response = await this.client.post(`/api/v4/projects/${projectId}/repository/tags`, {
+                tag_name: tagName,
+                ref: ref,
+                message: message
+            });
+            return response.data;
+        } catch (error: any) {
+            throw new Error(`Failed to create tag ${tagName}: ${error.response?.data?.message || error.message}`);
+        }
+    }
 }
 
 // Singleton instance
