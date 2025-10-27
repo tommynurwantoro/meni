@@ -9,20 +9,44 @@ import {
     ComponentType
 } from 'discord.js';
 import { getPortainerClient, ImagePullProgress, Service } from '../utils/portainerClient';
+import { getGitLabClient } from '../utils/gitlabClient';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-// Load whitelist services
-function getWhitelistedServices(): string[] {
+// Whitelist structure interfaces
+interface ServiceMapping {
+    gitlabProjectId: string;
+    description: string;
+}
+
+interface WhitelistConfig {
+    services: string[];
+    serviceMapping: Record<string, ServiceMapping>;
+    description?: string;
+}
+
+// Load whitelist configuration
+function getWhitelistConfig(): WhitelistConfig | null {
     try {
         const whitelistPath = join(process.cwd(), 'whitelist_service.json');
         const whitelistData = readFileSync(whitelistPath, 'utf-8');
         const whitelist = JSON.parse(whitelistData);
-        return whitelist.services || [];
+        return whitelist;
     } catch (error) {
         console.warn('⚠️ Could not load whitelist_service.json, showing all services');
+        return null;
+    }
+}
+
+// Get list of whitelisted service names
+function getWhitelistedServices(): string[] {
+    const config = getWhitelistConfig();
+    
+    if (!config || !config.services) {
         return [];
     }
+    
+    return config.services;
 }
 
 // Filter services based on whitelist
@@ -38,6 +62,17 @@ function filterWhitelistedServices(services: Service[]): Service[] {
     return services.filter((service: Service) => 
         whitelist.includes(service.Spec.Name)
     );
+}
+
+// Get GitLab project ID for a service
+function getGitLabProjectId(serviceName: string): string | null {
+    const config = getWhitelistConfig();
+    
+    if (!config || !config.serviceMapping || !config.serviceMapping[serviceName]) {
+        return null;
+    }
+    
+    return config.serviceMapping[serviceName].gitlabProjectId;
 }
 
 // Load whitelist endpoints
@@ -112,6 +147,11 @@ export const data = new SlashCommandBuilder()
         subcommand
             .setName('status')
             .setDescription('Check Portainer connection status')
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('tags')
+            .setDescription('Get latest 3 tags for a service from GitLab')
     );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -162,6 +202,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 break;
             case 'multi':
                 await handleMultiDeploy(interaction, client);
+                break;
+            case 'tags':
+                await handleGetTags(interaction);
                 break;
             case 'status':
                 await handleStatus(interaction, client);
@@ -828,3 +871,203 @@ async function handleStatus(interaction: ChatInputCommandInteraction, client: an
     }
 }
 
+/**
+ * Handle /deploy tags command
+ */
+async function handleGetTags(interaction: ChatInputCommandInteraction) {
+    await interaction.deferReply();
+    
+    try {
+        // Get whitelisted services
+        const services = getWhitelistedServices();
+        
+        if (services.length === 0) {
+            const noServicesEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('📋 Get Service Tags')
+                .setDescription('No services found in whitelist configuration.')
+                .setFooter({ text: 'Contact admin to configure services' })
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [noServicesEmbed] });
+            return;
+        }
+        
+        // Sort services alphabetically
+        const sortedServices = services.sort((a, b) => a.localeCompare(b));
+        
+        // Create select menu with services (up to 25 - Discord limit)
+        const options = sortedServices.slice(0, 25).map((service) => {
+            const config = getWhitelistConfig();
+            const description = config?.serviceMapping?.[service]?.description || 'No description';
+            
+            return {
+                label: service,
+                value: service,
+                description: description.substring(0, 100)
+            };
+        });
+        
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('tags_service_select')
+            .setPlaceholder('Select a service to view tags')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(options);
+        
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>()
+            .addComponents(selectMenu);
+        
+        const embed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📋 Get Service Tags from GitLab')
+            .setDescription('Select a service to view its latest 5 tags from GitLab.')
+            .setFooter({ text: 'Powered by MENI' })
+            .setTimestamp();
+        
+        const message = await interaction.editReply({ 
+            embeds: [embed], 
+            components: [row] 
+        });
+        
+        // Wait for selection
+        const collector = message.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
+            time: 60000 // 1 minute
+        });
+        
+        collector.on('collect', async (i) => {
+            if (i.user.id !== interaction.user.id) {
+                await i.reply({ content: 'This menu is not for you!', ephemeral: true });
+                return;
+            }
+            
+            const serviceName = i.values[0];
+            
+            // Show loading message
+            await i.update({ 
+                embeds: [new EmbedBuilder()
+                    .setColor(0xFFA500)
+                    .setTitle('🔄 Fetching Tags')
+                    .setDescription(`Fetching latest tags for **${serviceName}** from GitLab...`)
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp()], 
+                components: [] 
+            });
+            
+            try {
+                // Get GitLab project ID for the service
+                const projectId = getGitLabProjectId(serviceName);
+                if (!projectId) {
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('❌ Service Not Configured')
+                        .setDescription(`Service "${serviceName}" doesn't have a GitLab project ID mapping.`)
+                        .addFields(
+                            { name: 'Service', value: serviceName, inline: true }
+                        )
+                        .setFooter({ text: 'Contact admin to add GitLab project ID mapping' })
+                        .setTimestamp();
+                    
+                    await interaction.editReply({ embeds: [errorEmbed] });
+                    return;
+                }
+                
+                // Fetch tags from GitLab
+                const gitlabClient = getGitLabClient();
+                const tags = await gitlabClient.getProjectTags(projectId, 3);
+                
+                if (tags.length === 0) {
+                    const noTagsEmbed = new EmbedBuilder()
+                        .setColor(0xFFA500)
+                        .setTitle('📋 No Tags Found')
+                        .setDescription(`No tags found for service "${serviceName}".`)
+                        .addFields(
+                            { name: 'Service', value: serviceName, inline: true },
+                            { name: 'GitLab Project ID', value: projectId, inline: true }
+                        )
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp();
+                    
+                    await interaction.editReply({ embeds: [noTagsEmbed] });
+                    return;
+                }
+                
+                // Create embed with tags
+                const embed = new EmbedBuilder()
+                    .setColor(0x0099FF)
+                    .setTitle(`📋 Latest Tags for ${serviceName}`)
+                    .setDescription(`Showing ${tags.length} most recent tag(s) from GitLab`)
+                    .addFields(
+                        { name: 'Service', value: serviceName, inline: true },
+                        { name: 'Project ID', value: projectId, inline: true }
+                    )
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp();
+                
+                // Add each tag as a field
+                tags.forEach((tag, index) => {
+                    const commitDate = new Date(tag.commit.committed_date).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    
+                    let tagInfo = `**Commit:** \`${tag.commit.short_id}\`\n`;
+                    tagInfo += `**Date:** ${commitDate}\n`;
+                    tagInfo += `**Author:** ${tag.commit.author_name}\n`;
+                    
+                    if (tag.commit.title) {
+                        tagInfo += `**Message:** ${tag.commit.title.substring(0, 100)}${tag.commit.title.length > 100 ? '...' : ''}`;
+                    }
+                    
+                    embed.addFields({
+                        name: `${tag.name}`,
+                        value: tagInfo,
+                        inline: false
+                    });
+                });
+                
+                await interaction.editReply({ embeds: [embed] });
+            } catch (error: any) {
+                console.error('Get tags error:', error);
+                
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('❌ Failed to Fetch Tags')
+                    .setDescription(error.message || 'An unknown error occurred while fetching tags from GitLab')
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp();
+                
+                await interaction.editReply({ embeds: [errorEmbed] });
+            }
+        });
+        
+        collector.on('end', (collected) => {
+            if (collected.size === 0) {
+                interaction.editReply({ 
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('⏰ Timeout')
+                        .setDescription('Service selection timed out.')
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp()], 
+                    components: [] 
+                });
+            }
+        });
+    } catch (error: any) {
+        console.error('Get tags error:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ Failed to Load Services')
+            .setDescription(error.message || 'An unknown error occurred while loading services')
+            .setFooter({ text: 'Powered by MENI' })
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [errorEmbed] });
+    }
+}

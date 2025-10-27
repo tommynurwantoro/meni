@@ -60,6 +60,11 @@ AWS_ECR_REGISTRY_ID=123456789012  # Optional, your AWS account ID
 # AWS_ACCESS_KEY_ID=your_aws_access_key_here
 # AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
 
+# GitLab Configuration (for fetching tags)
+# Required for /deploy tags command
+GITLAB_URL=https://gitlab.com
+GITLAB_TOKEN=your_gitlab_personal_access_token_here
+
 # Deploy Command Role Restriction (optional)
 # Only users with this role ID can use deploy commands
 # Leave empty to allow everyone
@@ -167,6 +172,17 @@ Deploy and manage Docker Swarm services through Portainer API.
 - **Usage**: `/deploy status`
 - **Features**: Shows connected endpoints and their types
 
+#### `/deploy tags`
+- **Description**: Get latest 3 tags for a service from GitLab
+- **Usage**: `/deploy tags`
+- **Features**:
+  - Interactive dropdown menu to select service from whitelist
+  - Shows 3 most recent tags from GitLab
+  - Displays commit information (ID, author, date, message)
+  - Sorted alphabetically for easy selection
+  - Shows service description in dropdown
+  - Requires GitLab configuration in `.env`
+
 ## 🐳 Portainer Integration
 
 This bot includes a powerful Portainer integration for deploying Docker Swarm services. For detailed setup instructions, see:
@@ -234,27 +250,54 @@ If a service fails to start, you'll see:
 
 ### Whitelist Configuration
 
-#### Service Whitelist
+#### Service Whitelist with GitLab Integration
 
-To control which services are available for deployment:
+The service whitelist supports GitLab project mapping for fetching tags:
 
 1. Copy the example file:
    ```bash
    cp whitelist_service.example.json whitelist_service.json
    ```
 
-2. Edit `whitelist_service.json` and add your service names:
+2. Edit `whitelist_service.json` with your services and GitLab mappings:
    ```json
    {
      "services": [
-       "my-api-service",
-       "my-web-service",
-       "my-worker-service"
-     ]
+       "myapp-dev_api",
+       "myapp-dev_web",
+       "myapp-prod_api"
+     ],
+     "serviceMapping": {
+       "myapp-dev_api": {
+         "gitlabProjectId": "100",
+         "description": "Main API service - Dev"
+       },
+       "myapp-dev_web": {
+         "gitlabProjectId": "101",
+         "description": "Web frontend - Dev"
+       },
+       "myapp-prod_api": {
+         "gitlabProjectId": "100",
+         "description": "Main API service - Prod (same repo as dev)"
+       }
+     }
    }
    ```
 
-3. Only services in this list will appear in the deployment menu
+3. **Structure**:
+   - `services`: Array of service names that can be deployed
+   - `serviceMapping`: Maps each service to its GitLab project ID
+
+4. **GitLab Integration**:
+   - Each service in `serviceMapping` must have a `gitlabProjectId` to enable `/deploy tags` command
+   - Project IDs can be found in GitLab project settings
+   - Multiple services can share the same GitLab project ID (e.g., dev and prod environments)
+
+**Benefits:**
+- ✅ Control which services can be deployed
+- ✅ Fetch tags directly from GitLab for each service
+- ✅ Multiple services can reference the same GitLab repository
+- ✅ Simple and flexible configuration
 
 **Note**: If the file is missing or empty, all services will be shown.
 
