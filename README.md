@@ -63,7 +63,7 @@ AWS_ECR_REGISTRY_ID=123456789012  # Optional, your AWS account ID
 # GitLab Configuration (for fetching tags)
 # Required for /deploy tags command
 GITLAB_URL=https://gitlab.com
-GITLAB_TOKEN=your_gitlab_personal_access_token_here
+ENCRYPTION_KEY=your-secure-encryption-key-minimum-32-characters
 
 # Deploy Command Role Restriction (optional)
 # Only users with this role ID can use deploy commands
@@ -127,6 +127,31 @@ npm start
   - Moderation settings
   - Marketplace configuration
 
+### `/gitlab` 🔐
+Manage your personal GitLab access token for authenticated API access.
+
+#### `/gitlab token`
+- **Description**: Set your GitLab personal access token (encrypted and stored securely)
+- **Usage**: `/gitlab token`
+- **Security**: 
+  - Tokens are encrypted using AES-256-GCM encryption
+  - Only you can use your token
+  - Ensures proper attribution in GitLab (tags will show YOUR name as author)
+- **How to create a GitLab token**:
+  1. Go to GitLab → User Settings → Access Tokens
+  2. Create a token with `api` scope
+  3. Copy the token
+  4. Use `/gitlab token` and paste it in the modal
+
+#### `/gitlab remove`
+- **Description**: Remove your stored GitLab token
+- **Usage**: `/gitlab remove`
+
+#### `/gitlab status`
+- **Description**: Check if you have a GitLab token configured
+- **Usage**: `/gitlab status`
+- **Shows**: Configuration date and last update time
+
 ### `/deploy` 🚀
 Deploy and manage Docker Swarm services through Portainer API.
 
@@ -175,29 +200,35 @@ Deploy and manage Docker Swarm services through Portainer API.
 #### `/deploy tags`
 - **Description**: Get latest 3 tags for a service from GitLab
 - **Usage**: `/deploy tags`
+- **Prerequisites**: 
+  - ⚠️ **Must set your GitLab token first** using `/gitlab token`
+  - Requires GitLab URL in `.env` (GITLAB_URL)
 - **Features**:
   - Interactive dropdown menu to select service from whitelist
   - Shows 3 most recent tags from GitLab
   - Displays commit information (ID, author, date, message)
   - Sorted alphabetically for easy selection
   - Shows service description in dropdown
-  - Requires GitLab configuration in `.env`
+  - Uses YOUR personal GitLab token for access
 
 #### `/deploy create-tag`
 - **Description**: Create a new tag for a service in GitLab
 - **Usage**: `/deploy create-tag`
+- **Prerequisites**: 
+  - ⚠️ **Must set your GitLab token first** using `/gitlab token`
+  - Requires GitLab URL in `.env` (GITLAB_URL)
+  - Your GitLab token must have `api` scope and write permissions
 - **Features**:
   - Interactive dropdown menu to select service from whitelist
   - Modal form to input tag details:
     - **Tag Name**: The name of the tag (e.g., `v1.0.0`)
     - **Tag Message**: Description/message for the tag
   - Automatically creates tag from `main` branch
+  - **Tag will be created under YOUR GitLab account** (proper attribution)
   - Shows created tag details (commit ID, author, creation date)
   - **Edits the original message** to maintain history of who created the tag
   - Shows loading state during tag creation
   - Includes "Created By" field showing the Discord user who created the tag
-  - Requires GitLab configuration in `.env`
-  - Requires appropriate GitLab permissions to create tags
 
 ## 🐳 Portainer Integration
 

@@ -12,7 +12,6 @@ import {
     TextInputStyle
 } from 'discord.js';
 import { getPortainerClient, ImagePullProgress, Service } from '../utils/portainerClient';
-import { getGitLabClient } from '../utils/gitlabClient';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -889,6 +888,26 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
     
     try {
+        // Check if user has GitLab token configured
+        const { hasGitLabToken } = await import('./gitlab');
+        const hasToken = await hasGitLabToken(interaction.user.id);
+        
+        if (!hasToken) {
+            const noTokenEmbed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('🔐 GitLab Token Required')
+                .setDescription('You need to configure your GitLab personal access token before using this feature.')
+                .addFields(
+                    { name: 'How to Set Token', value: 'Use `/gitlab token` to set your token', inline: false },
+                    { name: 'Why?', value: 'Your personal token ensures proper attribution and access to your GitLab projects.', inline: false }
+                )
+                .setFooter({ text: 'Powered by MENI' })
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [noTokenEmbed] });
+            return;
+        }
+        
         // Get whitelisted services
         const services = getWhitelistedServices();
         
@@ -984,8 +1003,31 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
                     return;
                 }
                 
-                // Fetch tags from GitLab
-                const gitlabClient = getGitLabClient();
+                // Get user's GitLab token
+                const { getGitLabToken } = await import('./gitlab');
+                const userToken = await getGitLabToken(interaction.user.id);
+                
+                if (!userToken) {
+                    const noTokenEmbed = new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('🔐 GitLab Token Not Found')
+                        .setDescription('Your GitLab token could not be retrieved. Please set it again using `/gitlab token`.')
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp();
+                    
+                    await interaction.editReply({ embeds: [noTokenEmbed] });
+                    return;
+                }
+                
+                // Fetch tags from GitLab using user's token
+                const { GitLabClient } = await import('../utils/gitlabClient');
+                const gitlabUrl = process.env.GITLAB_URL;
+                
+                if (!gitlabUrl) {
+                    throw new Error('GitLab URL is not configured');
+                }
+                
+                const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
                 const tags = await gitlabClient.getProjectTags(projectId, 3);
                 
                 if (tags.length === 0) {
@@ -1088,6 +1130,26 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
  */
 async function handleCreateTag(interaction: ChatInputCommandInteraction) {
     try {
+        // Check if user has GitLab token configured
+        const { hasGitLabToken } = await import('./gitlab');
+        const hasToken = await hasGitLabToken(interaction.user.id);
+        
+        if (!hasToken) {
+            const noTokenEmbed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('🔐 GitLab Token Required')
+                .setDescription('You need to configure your GitLab personal access token before using this feature.')
+                .addFields(
+                    { name: 'How to Set Token', value: 'Use `/gitlab token` to set your token', inline: false },
+                    { name: 'Why?', value: 'Your personal token ensures you are recorded as the tag author in GitLab.', inline: false }
+                )
+                .setFooter({ text: 'Powered by MENI' })
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [noTokenEmbed], ephemeral: true });
+            return;
+        }
+        
         // Get whitelisted services
         const services = getWhitelistedServices();
         

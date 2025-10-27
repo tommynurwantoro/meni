@@ -10,6 +10,12 @@ import { redisManager } from "../utils/redis";
 export async function handleModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
 
+  // Check if customId starts with gitlab_token_modal (format: gitlab_token_modal_userId)
+  if (customId.startsWith("gitlab_token_modal_")) {
+    await handleGitLabTokenModal(interaction);
+    return;
+  }
+
   // Check if customId starts with create_tag_modal (format: create_tag_modal_serviceName_projectId)
   if (customId.startsWith("create_tag_modal_")) {
     await handleCreateTagModal(interaction);
@@ -759,6 +765,51 @@ function getCategoryInfo(category: string) {
   );
 }
 
+async function handleGitLabTokenModal(interaction: ModalSubmitInteraction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  try {
+    const token = interaction.fields.getTextInputValue("gitlab_token").trim();
+
+    // Save the token
+    const { saveGitLabToken } = await import("../commands/gitlab");
+    await saveGitLabToken(interaction.user.id, token);
+
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x00FF00)
+      .setTitle("✅ Token Saved Successfully")
+      .setDescription(
+        "Your GitLab personal access token has been encrypted and stored securely.\n\n" +
+          "You can now use GitLab features like:\n" +
+          "• `/deploy tags` - View repository tags\n" +
+          "• `/deploy create-tag` - Create new tags"
+      )
+      .addFields({
+        name: "Security",
+        value:
+          "🔒 Your token is encrypted using AES-256-GCM encryption and stored securely in the database.",
+        inline: false,
+      })
+      .setFooter({ text: "Powered by MENI" })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [successEmbed] });
+  } catch (error: any) {
+    console.error("Save GitLab token modal error:", error);
+
+    const errorEmbed = new EmbedBuilder()
+      .setColor(0xFF0000)
+      .setTitle("❌ Failed to Save Token")
+      .setDescription(
+        error.message || "An unknown error occurred while saving your token"
+      )
+      .setFooter({ text: "Powered by MENI" })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [errorEmbed] });
+  }
+}
+
 async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
   try {
     // Parse custom ID to get service name and project ID
@@ -805,9 +856,31 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
 
     await originalMessage.edit({ embeds: [loadingEmbed], components: [] });
 
-    // Import GitLab client
-    const { getGitLabClient } = await import("../utils/gitlabClient");
-    const gitlabClient = getGitLabClient();
+    // Get user's GitLab token
+    const { getGitLabToken } = await import("../commands/gitlab");
+    const userToken = await getGitLabToken(interaction.user.id);
+    
+    if (!userToken) {
+      const noTokenEmbed = new EmbedBuilder()
+        .setColor(0xFF0000)
+        .setTitle("🔐 GitLab Token Not Found")
+        .setDescription("Your GitLab token could not be retrieved. Please set it again using `/gitlab token`.")
+        .setFooter({ text: "Powered by MENI" })
+        .setTimestamp();
+      
+      await originalMessage.edit({ embeds: [noTokenEmbed], components: [] });
+      return;
+    }
+
+    // Import GitLab client and create instance with user's token
+    const { GitLabClient } = await import("../utils/gitlabClient");
+    const gitlabUrl = process.env.GITLAB_URL;
+    
+    if (!gitlabUrl) {
+      throw new Error("GitLab URL is not configured");
+    }
+    
+    const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
 
     // Create the tag (from main branch)
     const tag = await gitlabClient.createTag(projectId, tagName, "main", tagMessage);

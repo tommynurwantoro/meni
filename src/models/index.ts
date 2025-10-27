@@ -1,6 +1,7 @@
 import { Review } from './Review';
 import { PointsUser } from './PointsUser';
 import { PointsTransaction } from './PointsTransaction';
+import { GitLabToken } from './GitLabToken';
 import sequelize from '../utils/database';
 
 // Initialize all models
@@ -8,10 +9,11 @@ const models = {
   Review,
   PointsUser,
   PointsTransaction,
+  GitLabToken,
 };
 
 // Export individual models
-export { Review, PointsUser, PointsTransaction };
+export { Review, PointsUser, PointsTransaction, GitLabToken };
 
 // Define associations - without foreign key constraints to avoid type conflicts
 PointsUser.hasMany(PointsTransaction, {

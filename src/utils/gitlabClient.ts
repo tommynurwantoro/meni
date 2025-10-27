@@ -112,19 +112,3 @@ export function initializeGitLabClient(baseUrl: string, token: string): GitLabCl
     gitlabClientInstance = new GitLabClient({ baseUrl, token });
     return gitlabClientInstance;
 }
-
-export function getGitLabClient(): GitLabClient {
-    if (!gitlabClientInstance) {
-        const baseUrl = process.env.GITLAB_URL;
-        const token = process.env.GITLAB_TOKEN;
-
-        if (!baseUrl || !token) {
-            throw new Error('GitLab is not configured. Set GITLAB_URL and GITLAB_TOKEN environment variables.');
-        }
-
-        gitlabClientInstance = new GitLabClient({ baseUrl, token });
-    }
-
-    return gitlabClientInstance;
-}
-
