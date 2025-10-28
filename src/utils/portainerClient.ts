@@ -482,19 +482,12 @@ class PortainerClient {
     }
 
     /**
-     * Main deployment workflow: pull image on all nodes, update service, and check health
+     * Pre-pull image on all nodes for GitOps deployment workflow
      */
-    async deployService(endpointId: number, serviceName: string, tag?: string, checkHealth: boolean = true): Promise<{
+    async deployService(endpointId: number, serviceName: string, tag?: string): Promise<{
         pullResults: ImagePullProgress[];
-        serviceUpdated: boolean;
-        health?: {
-            healthy: boolean;
-            status: string;
-            runningTasks: number;
-            desiredReplicas: number;
-            failedTasks: Array<{ node: string; error: string; state: string }>;
-            message: string;
-        };
+        imageName: string;
+        imageTag: string;
         message: string;
     }> {
         try {
@@ -511,13 +504,13 @@ class PortainerClient {
                 // Remove existing tag/digest if present
                 const imageWithoutTag = imageName.split(':')[0].split('@')[0];
                 imageName = `${imageWithoutTag}:${tag}`;
-                console.log(`🚀 Deploying: ${serviceName} with tag: ${tag}`);
+                console.log(`🚀 Pre-pulling: ${serviceName} with tag: ${tag}`);
                 console.log(`📦 Image: ${imageName}`);
             } else {
-                console.log(`🚀 Deploying: ${serviceName}`);
+                console.log(`🚀 Pre-pulling: ${serviceName}`);
             }
 
-            // Step 1: Pull image on all nodes
+            // Pull image on all nodes
             const pullResults = await this.pullImageOnAllNodes(endpointId, imageName, tag || 'dev');
 
             // Check if at least one node succeeded
@@ -526,58 +519,33 @@ class PortainerClient {
                 throw new Error('Failed to pull image on any node');
             }
 
-            // Step 2: Update the service with new image
-            if (tag) {
-                // Update the service spec with the new image
-                service.Spec.TaskTemplate.ContainerSpec.Image = imageName;
-            }
-            await this.updateService(endpointId, service.ID, service);
-
-            // Step 3: Check service health (optional)
-            let health;
-            if (checkHealth) {
-                health = await this.checkServiceHealth(endpointId, serviceName, 60000); // 60 second timeout
-            }
-
-            console.log(`🎉 Deployment complete: ${serviceName}`);
+            console.log(`✅ Pre-pull complete: ${serviceName}. Image pulled on ${successCount}/${pullResults.length} nodes.`);
 
             return {
                 pullResults,
-                serviceUpdated: true,
-                health,
-                message: health?.healthy 
-                    ? `✅ Successfully deployed ${serviceName}. Service is running healthy.`
-                    : health?.status === 'failed'
-                    ? `⚠️ Deployment completed but service failed to start properly.`
-                    : health?.status === 'timeout'
-                    ? `⚠️ Deployment completed but health check timed out.`
-                    : `✅ Successfully deployed ${serviceName}. Image pulled on ${successCount}/${pullResults.length} nodes.`,
+                imageName,
+                imageTag: tag || 'dev',
+                message: `✅ Pre-pulled ${serviceName}. Image pulled on ${successCount}/${pullResults.length} nodes. GitOps will handle deployment.`,
             };
         } catch (error: any) {
-            console.error(`❌ Deployment failed for ${serviceName}:`, error.message);
-            throw new Error(`Deployment failed: ${error.message}`);
+            console.error(`❌ Pre-pull failed for ${serviceName}:`, error.message);
+            throw new Error(`Pre-pull failed: ${error.message}`);
         }
     }
 
     /**
-     * Optimized deployment for multiple services:
+     * Optimized pre-pull for multiple services for GitOps workflow:
      * 1. Pull unique images once
-     * 2. Update all services that use those images
+     * 2. Return map of service → pull results and image info
      */
-    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[], tags?: Map<string, string>, checkHealth: boolean = true): Promise<{
+    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[], tags?: Map<string, string>): Promise<{
         results: Array<{
             serviceName: string;
             success: boolean;
             message: string;
+            imageName?: string;
+            imageTag?: string;
             pullResults?: ImagePullProgress[];
-            health?: {
-                healthy: boolean;
-                status: string;
-                runningTasks: number;
-                desiredReplicas: number;
-                failedTasks: Array<{ node: string; error: string; state: string }>;
-                message: string;
-            };
         }>;
         imagePullResults: Map<string, ImagePullProgress[]>;
     }> {
@@ -585,15 +553,9 @@ class PortainerClient {
             serviceName: string;
             success: boolean;
             message: string;
+            imageName?: string;
+            imageTag?: string;
             pullResults?: ImagePullProgress[];
-            health?: {
-                healthy: boolean;
-                status: string;
-                runningTasks: number;
-                desiredReplicas: number;
-                failedTasks: Array<{ node: string; error: string; state: string }>;
-                message: string;
-            };
         }> = [];
         const imagePullResults = new Map<string, ImagePullProgress[]>();
 
@@ -649,7 +611,7 @@ class PortainerClient {
             // Step 3: Pull each unique image once
             for (const [image, imageData] of servicesByImage.entries()) {
                 const { services: servicesUsingImage, tag } = imageData;
-                console.log(`🔄 Pulling image for ${servicesUsingImage.length} service(s)...`);
+                console.log(`🔄 Pre-pulling image for ${servicesUsingImage.length} service(s)...`);
                 try {
                     const pullResults = await this.pullImageOnAllNodes(endpointId, image, tag || 'dev');
                     imagePullResults.set(image, pullResults);
@@ -662,6 +624,8 @@ class PortainerClient {
                             results.push({
                                 serviceName: service.Spec.Name,
                                 success: false,
+                                imageName: image,
+                                imageTag: tag || 'dev',
                                 message: `❌ Failed to pull image on any node`,
                                 pullResults,
                             });
@@ -669,53 +633,25 @@ class PortainerClient {
                         continue;
                     }
 
-                    // Step 4: Update all services that use this image
-                    for (const service of servicesUsingImage) {
-                        try {
-                            // Update service spec with the final image if tag was specified
-                            if (tag) {
-                                service.Spec.TaskTemplate.ContainerSpec.Image = image;
-                            }
-                            await this.updateService(endpointId, service.ID, service);
-                            
-                            // Step 5: Check health if enabled
-                            let health;
-                            if (checkHealth) {
-                                try {
-                                    health = await this.checkServiceHealth(endpointId, service.Spec.Name, 60000);
-                                } catch (error: any) {
-                                    console.warn(`⚠️ Health check failed for ${service.Spec.Name}:`, error.message);
-                                }
-                            }
-                            
-                            results.push({
-                                serviceName: service.Spec.Name,
-                                success: true,
-                                message: health?.healthy 
-                                    ? `✅ Successfully deployed and running healthy.`
-                                    : health?.status === 'failed'
-                                    ? `⚠️ Deployed but service failed to start.`
-                                    : health?.status === 'timeout'
-                                    ? `⚠️ Deployed but health check timed out.`
-                                    : `✅ Successfully deployed. Image pulled on ${successCount}/${pullResults.length} nodes.`,
-                                pullResults,
-                                health,
-                            });
-                        } catch (error: any) {
-                            results.push({
-                                serviceName: service.Spec.Name,
-                                success: false,
-                                message: `❌ ${error.message}`,
-                                pullResults,
-                            });
-                        }
-                    }
+                    // Add results for all services that use this image
+                    servicesUsingImage.forEach(service => {
+                        results.push({
+                            serviceName: service.Spec.Name,
+                            success: true,
+                            imageName: image,
+                            imageTag: tag || 'dev',
+                            message: `✅ Pre-pulled. Image pulled on ${successCount}/${pullResults.length} nodes. GitOps will handle deployment.`,
+                            pullResults,
+                        });
+                    });
                 } catch (error: any) {
                     // If pull fails, mark all services as failed
                     servicesUsingImage.forEach(service => {
                         results.push({
                             serviceName: service.Spec.Name,
                             success: false,
+                            imageName: image,
+                            imageTag: tag || 'dev',
                             message: `❌ Failed to pull image: ${error.message}`,
                         });
                     });

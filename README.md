@@ -156,20 +156,26 @@ Manage your personal GitLab access token for authenticated API access.
 Deploy and manage Docker Swarm services through Portainer API.
 
 #### `/deploy service`
-- **Description**: Deploy a specific service with latest image and health verification
+- **Description**: Deploy a specific service using GitOps workflow
 - **Usage**: `/deploy service endpoint:1`
 - **Parameters**:
   - `endpoint`: Portainer endpoint ID
 - **What it does**:
   1. Shows interactive menu to select a service
-  2. Pulls the latest image with the same tag across all swarm nodes
-  3. Updates the service to use the latest image version
-  4. **Monitors service health** for up to 60 seconds
-  5. Provides detailed deployment status with:
-     - Node-by-node pull results
-     - Service health status (running/failed/timeout)
-     - Task replica counts
-     - Error messages if deployment fails
+  2. Pre-pulls the image across all swarm nodes to cache it
+  3. Updates the image tag in GitLab configuration file
+  4. **GitOps handles the actual deployment automatically**
+  5. Provides deployment results with:
+     - Pre-pull results (node-by-node status)
+     - GitLab commit information (with links)
+     - Image information (name, tag, digests)
+     - Note: No health monitoring needed (GitOps handles it)
+
+**GitOps Integration:**
+- The bot updates the docker-compose.yml file in your GitLab repository
+- Your GitOps system (ArgoCD, Flux, etc.) picks up the changes
+- Deployment happens automatically via GitOps pipeline
+- Results include commit SHA and GitLab commit URL
 
 #### `/deploy list`
 - **Description**: List all available services in an endpoint
@@ -179,18 +185,25 @@ Deploy and manage Docker Swarm services through Portainer API.
 - **Features**: Paginated list with service names and image tags
 
 #### `/deploy multi`
-- **Description**: Deploy multiple services interactively with optimized image pulling and health verification
+- **Description**: Deploy multiple services using GitOps workflow with optimized image pre-pulling
 - **Usage**: `/deploy multi endpoint:1`
 - **Parameters**:
   - `endpoint`: Portainer endpoint ID
 - **Features**: 
   - Interactive service selection menu
   - Deploy up to 25 services at once
-  - **Optimized deployment**: Groups services by image and pulls each unique image only once
-  - **Health monitoring**: Automatically checks each service after deployment
-  - Visual health indicators (🟢 healthy, 🟡 timeout, 🔴 failed)
+  - **Optimized pre-pulling**: Groups services by image and pulls each unique image only once
+  - **Batch GitOps updates**: Updates docker-compose.yml for all services, batching by repository
+  - **GitOps handles deployment**: Your GitOps system picks up the changes
   - Significantly reduces deployment time when multiple services share the same image
-  - Detailed results for each service with success/failure tracking and replica counts
+  - Detailed results with commit information and pre-pull status
+  - Shows which repositories were updated with which services
+
+**GitOps Benefits:**
+- Single commit per repository (even for multiple services)
+- Atomic updates - all services in a repo update together
+- Your GitOps system handles the actual deployment
+- Includes repository grouping information in results
 
 #### `/deploy status`
 - **Description**: Check Portainer connection status
@@ -232,27 +245,33 @@ Deploy and manage Docker Swarm services through Portainer API.
 
 ## 🐳 Portainer Integration
 
-This bot includes a powerful Portainer integration for deploying Docker Swarm services. For detailed setup instructions, see:
+This bot includes a powerful Portainer + GitOps integration for deploying Docker Swarm services. For detailed setup instructions, see:
 
 📖 **[Portainer Setup Guide](PORTAINER_SETUP.md)**
 
 Quick start:
 1. Add Portainer credentials to `.env`
-2. Create `whitelist_service.json` to control which services can be deployed
+2. Create `whitelist_service.json` with GitOps configuration to control which services can be deployed
 3. Use `/deploy status` to verify connection
-4. Use `/deploy service` to deploy services
+4. Use `/deploy service` to deploy services via GitOps workflow
+
+**GitOps Workflow Overview:**
+1. **Pre-pull Images**: Bot pulls Docker images to all swarm nodes
+2. **Update Config**: Bot updates docker-compose.yml files in GitLab
+3. **GitOps Deployment**: Your GitOps system (ArgoCD, Flux, etc.) handles actual deployment
+4. **Track Results**: Bot shows pre-pull status and GitLab commit information
 
 For implementation details, see [Integration Summary](INTEGRATION_SUMMARY.md).
 
-### ⚡ Optimized Multi-Service Deployment
+### ⚡ Optimized Multi-Service Pre-pulling with GitOps
 
-The bot uses an optimized deployment strategy for multiple services that significantly reduces deployment time:
+The bot uses an optimized image pre-pulling strategy for multiple services that significantly reduces deployment time:
 
 **How it works:**
 1. **Group by Image**: Services are grouped by their container image
-2. **Pull Once**: Each unique image is pulled only once across all cluster nodes
-3. **Update All**: All services using that image are updated simultaneously
-4. **Health Check**: Automatically verifies each service is running properly
+2. **Pre-pull Once**: Each unique image is pulled once across all cluster nodes (caching)
+3. **Batch GitOps Updates**: Updates docker-compose.yml files, grouping by repository
+4. **GitOps Deployment**: Your GitOps system handles the actual service updates
 
 **Example:**
 If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
@@ -260,53 +279,59 @@ If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
 - **New behavior**: Pull `app:latest` once + Pull `worker:latest` once = 2 pulls
 
 **Benefits:**
-- ⚡ 5-10x faster deployment for services sharing images
-- 📉 Reduced network bandwidth usage
-- 🔄 Minimized downtime with parallel service updates
-- 💾 Lower registry API load
-- ✅ Automatic health verification
+- ⚡ 5-10x faster image pre-pulling for services sharing images
+- 📉 Reduced network bandwidth usage through caching
+- 🔄 GitOps handles coordinated service updates
+- 💾 Lower registry API load with batch updates
+- ✅ Atomic updates via GitOps (single commits per repository)
 
-### 🏥 Automatic Health Monitoring
+### 🔄 GitOps Deployment Integration
 
-After each deployment, the bot automatically monitors the service health to ensure it's running properly:
+With GitOps integration, health monitoring is handled by your GitOps system (ArgoCD, Flux, etc.):
 
-**Health Check Process:**
-1. **Monitor Tasks**: Tracks Docker Swarm tasks for the service
-2. **Count Replicas**: Verifies all desired replicas are running
-3. **Detect Failures**: Identifies failed or rejected tasks
-4. **Timeout Handling**: Waits up to 60 seconds for service to stabilize
-
-**Health Status Indicators:**
-- 🟢 **Healthy**: All replicas are running successfully
-- 🟡 **Timeout**: Service is starting but not all replicas are ready yet
-- 🔴 **Failed**: Service failed to start (shows error messages)
+**Deployment Results:**
+- ✅ **Pre-pull Status**: Node-by-node image caching results
+- 🔄 **GitLab Commit**: Commit ID, branch, and file information
+- 📦 **Image Info**: Image name, tag, digest information
+- 🔗 **Commit Links**: Direct links to GitLab commits
 
 **What You See:**
 ```
-✅ my-service 🟢 (2/2 nodes)
-└ Health: 3/3 running
+✅ GitOps Deployment Initiated
+📦 Image: myapp:latest
+└ GitLab Commit: abc12345 (main)
+└ View Commit: [View in GitLab](link)
 └ Image ID: abc123def456
 └ Digest: sha256:...
+
+📦 Image Pull Results
+✅ Success:
+--- Node 1 ---
+• Digest: `sha256:abc123...`
+• Image ID: `abc123def456`
+--- Node 2 ---
+• Digest: `sha256:def456...`
+• Image ID: `def456ghi789`
 ```
 
-**Error Details:**
-If a service fails to start, you'll see:
-- Number of running vs desired replicas
-- Specific error messages from failed tasks
-- Node information for troubleshooting
+**GitOps Benefits:**
+- Your GitOps system handles health monitoring
+- Rollback capabilities built into GitOps
+- Audit trail through GitLab commits
+- Automated deployment pipeline
 
 ### Whitelist Configuration
 
 #### Service Whitelist with GitLab Integration
 
-The service whitelist supports GitLab project mapping for fetching tags:
+The service whitelist supports both GitLab project mapping for fetching tags and GitOps configuration for deployment:
 
 1. Copy the example file:
    ```bash
    cp whitelist_service.example.json whitelist_service.json
    ```
 
-2. Edit `whitelist_service.json` with your services and GitLab mappings:
+2. Edit `whitelist_service.json` with your services, GitLab mappings, and GitOps configuration:
    ```json
    {
      "services": [
@@ -317,15 +342,25 @@ The service whitelist supports GitLab project mapping for fetching tags:
      "serviceMapping": {
        "myapp-dev_api": {
          "gitlabProjectId": "100",
-         "description": "Main API service - Dev"
+         "description": "Main API service - Dev",
+         "gitOpsRepoId": "150",
+         "gitOpsFilePath": "portainer/dev/docker-compose.yml",
+         "gitOpsBranch": "main",
+         "serviceName": "api"
        },
        "myapp-dev_web": {
          "gitlabProjectId": "101",
-         "description": "Web frontend - Dev"
+         "description": "Web frontend - Dev",
+         "gitOpsRepoId": "150", 
+         "gitOpsFilePath": "portainer/dev/docker-compose.yml",
+         "gitOpsBranch": "main"
        },
        "myapp-prod_api": {
          "gitlabProjectId": "100",
-         "description": "Main API service - Prod (same repo as dev)"
+         "description": "Main API service - Prod (same repo as dev)",
+         "gitOpsRepoId": "160",
+         "gitOpsFilePath": "portainer/prod/docker-compose.yml", 
+         "gitOpsBranch": "main"
        }
      }
    }
@@ -333,18 +368,40 @@ The service whitelist supports GitLab project mapping for fetching tags:
 
 3. **Structure**:
    - `services`: Array of service names that can be deployed
-   - `serviceMapping`: Maps each service to its GitLab project ID
+   - `serviceMapping`: Maps each service to its GitLab project ID and GitOps configuration
 
 4. **GitLab Integration**:
    - Each service in `serviceMapping` must have a `gitlabProjectId` to enable `/deploy tags` command
    - Project IDs can be found in GitLab project settings
    - Multiple services can share the same GitLab project ID (e.g., dev and prod environments)
 
+5. **GitOps Configuration** (required for deployment):
+   - `gitOpsRepoId`: GitLab project ID containing the docker-compose.yml file
+   - `gitOpsFilePath`: Path to the docker-compose.yml file in the repository
+   - `gitOpsBranch`: Branch to commit changes to (default: "main")
+   - **Multiple services can share the same repository and file** (batch commits)
+
+6. **Service Name Mapping** (for Docker Stack services):
+   - `serviceName`: Actual service name in docker-compose.yml file
+   - **Required when Docker service name differs from YAML service name (e.g., `tools_rain` → `rain`)**
+   - **Optional**: If not provided, uses the stack service name as-is
+
 **Benefits:**
 - ✅ Control which services can be deployed
 - ✅ Fetch tags directly from GitLab for each service
 - ✅ Multiple services can reference the same GitLab repository
+- ✅ GitOps deployment with automatic configuration updates
+- ✅ Batch commits for services sharing the same GitOps repository
+- ✅ Handle Docker Stack service names (e.g., `stack_service` → `service`)
 - ✅ Simple and flexible configuration
+
+**Docker Stack Service Names:**
+Docker Swarm stacks create service names with the pattern `{stack}_{service}`. If your docker-compose.yml defines a service named `rain` in a stack named `tools`, Swarm creates a service called `tools_rain`. 
+
+To deploy such services via GitOps:
+- Use the stack service name (`tools_rain`) in the `services` list
+- Set `serviceName` to the actual name in docker-compose.yml (`rain`)
+- The bot will automatically map `tools_rain` → `rain` when updating the YAML file
 
 **Note**: If the file is missing or empty, all services will be shown.
 
