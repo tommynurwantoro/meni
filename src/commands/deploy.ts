@@ -320,125 +320,280 @@ async function handleServiceDeploy(interaction: ChatInputCommandInteraction, cli
             }
 
             const serviceName = i.values[0];
+
+            // Check if user has GitLab token
+            const { hasGitLabToken } = await import('./gitlab');
+            const hasToken = await hasGitLabToken(i.user.id);
             
-            // Show starting embed
-            const startEmbed = new EmbedBuilder()
+            if (!hasToken) {
+                const noTokenEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('🔐 GitLab Token Required')
+                    .setDescription('You need to configure your GitLab personal access token to deploy services.')
+                    .addFields(
+                        { name: 'How to Set Token', value: 'Use `/gitlab token` to set your token', inline: false },
+                        { name: 'Why?', value: 'We need to fetch available tags from GitLab for deployment.', inline: false }
+                    )
+                    .setFooter({ text: 'Powered by MENI' })
+                    .setTimestamp();
+                
+                await i.update({ embeds: [noTokenEmbed], components: [] });
+                return;
+            }
+            
+            // Show loading while fetching tags
+            const loadingEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
-                .setTitle('🚀 Starting Deployment')
-                .setDescription(`Deploying service: **${serviceName}**`)
-                .addFields(
-                    { name: 'Endpoint', value: `${endpointId}`, inline: true },
-                    { name: 'Status', value: '⏳ In Progress...', inline: true }
-                )
+                .setTitle('🔍 Fetching Available Tags')
+                .setDescription(`Fetching tags for **${serviceName}** from GitLab...`)
                 .setFooter({ text: 'Powered by MENI' })
                 .setTimestamp();
-
-            await i.update({ 
-                embeds: [startEmbed], 
-                components: [] 
-            });
-
+            
+            await i.update({ embeds: [loadingEmbed], components: [] });
+            
             try {
-                const result = await client.deployService(endpointId, serviceName);
-
-                // Determine embed color based on health status
-                let embedColor = 0x00FF00; // Green
-                let title = '✅ Deployment Successful';
-                
-                if (result.health) {
-                    if (!result.health.healthy) {
-                        if (result.health.status === 'failed') {
-                            embedColor = 0xFF0000; // Red
-                            title = '❌ Deployment Failed';
-                        } else if (result.health.status === 'timeout') {
-                            embedColor = 0xFFA500; // Orange
-                            title = '⚠️ Deployment Completed (Health Check Timeout)';
-                        }
-                    }
+                // Get GitLab project ID for the service
+                const projectId = getGitLabProjectId(serviceName);
+                if (!projectId) {
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('❌ Service Not Configured')
+                        .setDescription(`Service "${serviceName}" doesn't have a GitLab project ID mapping.`)
+                        .setFooter({ text: 'Contact admin to add GitLab project ID mapping' })
+                        .setTimestamp();
+                    
+                    await i.editReply({ embeds: [errorEmbed], components: [] });
+                    return;
                 }
-
-                // Create success embed with pull results
-                const successEmbed = new EmbedBuilder()
-                    .setColor(embedColor)
-                    .setTitle(title)
-                    .setDescription(result.message)
+                
+                // Get user's GitLab token and fetch tags
+                const { getGitLabToken } = await import('./gitlab');
+                const userToken = await getGitLabToken(i.user.id);
+                
+                if (!userToken) {
+                    const noTokenEmbed = new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('🔐 GitLab Token Not Found')
+                        .setDescription('Your GitLab token could not be retrieved. Please set it again using `/gitlab token`.')
+                        .setFooter({ text: 'Powered by MENI' })
+                        .setTimestamp();
+                    
+                    await i.editReply({ embeds: [noTokenEmbed], components: [] });
+                    return;
+                }
+                
+                // Fetch tags from GitLab
+                const { GitLabClient } = await import('../utils/gitlabClient');
+                const gitlabUrl = process.env.GITLAB_URL;
+                
+                if (!gitlabUrl) {
+                    throw new Error('GitLab URL is not configured');
+                }
+                
+                const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
+                const tags = await gitlabClient.getProjectTags(projectId, 10); // Get last 10 tags
+                
+                if (tags.length === 0) {
+                    const noTagsEmbed = new EmbedBuilder()
+                        .setColor(0xFFA500)
+                        .setTitle('📋 No Tags Found')
+                        .setDescription(`No tags found for service "${serviceName}". Cannot proceed with deployment.`)
+                        .setFooter({ text: 'Create a tag first using /deploy create-tag' })
+                        .setTimestamp();
+                    
+                    await i.editReply({ embeds: [noTagsEmbed], components: [] });
+                    return;
+                }
+                
+                // Create select menu for tags
+                const tagOptions = tags.map((tag) => ({
+                    label: tag.name,
+                    value: tag.name,
+                    description: `${tag.commit.short_id} - ${tag.commit.title.substring(0, 80)}`
+                }));
+                
+                const tagSelectMenu = new StringSelectMenuBuilder()
+                    .setCustomId(`tag_select_${serviceName}`)
+                    .setPlaceholder('Select a tag to deploy')
+                    .setMinValues(1)
+                    .setMaxValues(1)
+                    .addOptions(tagOptions);
+                
+                const tagRow = new ActionRowBuilder<StringSelectMenuBuilder>()
+                    .addComponents(tagSelectMenu);
+                
+                const tagEmbed = new EmbedBuilder()
+                    .setColor(0x0099FF)
+                    .setTitle('🏷️ Select Tag to Deploy')
+                    .setDescription(`Select a tag for **${serviceName}** deployment.\n\nShowing ${tags.length} most recent tag(s).`)
                     .addFields(
                         { name: 'Service', value: serviceName, inline: true },
                         { name: 'Endpoint', value: `${endpointId}`, inline: true }
                     )
                     .setFooter({ text: 'Powered by MENI' })
                     .setTimestamp();
+                
+                await i.editReply({ embeds: [tagEmbed], components: [tagRow] });
+                
+                // Wait for tag selection
+                const tagCollector = i.message!.createMessageComponentCollector({
+                    componentType: ComponentType.StringSelect,
+                    time: 60000 // 1 minute
+                });
+                
+                tagCollector.on('collect', async (tagInteraction) => {
+                    if (tagInteraction.user.id !== interaction.user.id) {
+                        await tagInteraction.reply({ content: 'This menu is not for you!', ephemeral: true });
+                        return;
+                    }
+                    
+                    const selectedTag = tagInteraction.values[0];
+                    
+                    // Show deploying embed
+                    const deployingEmbed = new EmbedBuilder()
+        .setColor(0xFFA500)
+        .setTitle('🚀 Starting Deployment')
+                        .setDescription(`Deploying **${serviceName}** with tag **${selectedTag}**`)
+        .addFields(
+            { name: 'Endpoint', value: `${endpointId}`, inline: true },
+                            { name: 'Tag', value: selectedTag, inline: true },
+                            { name: 'Status', value: '⏳ In Progress...', inline: false }
+        )
+                        .setFooter({ text: 'Powered by MENI' })
+        .setTimestamp();
 
-                // Add health status
-                if (result.health) {
-                    let healthStatus = '';
-                    if (result.health.healthy) {
-                        healthStatus = `✅ **Healthy** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
-                    } else if (result.health.status === 'failed') {
-                        healthStatus = `❌ **Failed** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
+                    await tagInteraction.update({ embeds: [deployingEmbed], components: [] });
+                    
+                    // Deploy with specific tag
+                    try {
+                        const result = await client.deployService(endpointId, serviceName, selectedTag);
+
+                        // Determine embed color based on health status
+                        let embedColor = 0x00FF00; // Green
+                        let title = '✅ Deployment Successful';
                         
-                        if (result.health.failedTasks.length > 0) {
-                            healthStatus += '\n\n**Errors:**\n';
-                            result.health.failedTasks.slice(0, 3).forEach((task: any) => {
-                                healthStatus += `• ${task.error.substring(0, 100)}\n`;
+                        if (result.health) {
+                            if (!result.health.healthy) {
+                                if (result.health.status === 'failed') {
+                                    embedColor = 0xFF0000; // Red
+                                    title = '❌ Deployment Failed';
+                                } else if (result.health.status === 'timeout') {
+                                    embedColor = 0xFFA500; // Orange
+                                    title = '⚠️ Deployment Completed (Health Check Timeout)';
+                                }
+                            }
+                        }
+
+        // Create success embed with pull results
+        const successEmbed = new EmbedBuilder()
+                            .setColor(embedColor)
+                            .setTitle(title)
+            .setDescription(result.message)
+            .addFields(
+                { name: 'Service', value: serviceName, inline: true },
+                                { name: 'Endpoint', value: `${endpointId}`, inline: true },
+                                { name: 'Tag', value: selectedTag, inline: true }
+            )
+                            .setFooter({ text: 'Powered by MENI' })
+            .setTimestamp();
+
+                        // Add health status
+                        if (result.health) {
+                            let healthStatus = '';
+                            if (result.health.healthy) {
+                                healthStatus = `✅ **Healthy** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
+                            } else if (result.health.status === 'failed') {
+                                healthStatus = `❌ **Failed** (${result.health.runningTasks}/${result.health.desiredReplicas} replicas running)`;
+                                
+                                if (result.health.failedTasks.length > 0) {
+                                    healthStatus += '\n\n**Errors:**\n';
+                                    result.health.failedTasks.slice(0, 3).forEach((task: any) => {
+                                        healthStatus += `• ${task.error.substring(0, 100)}\n`;
+                                    });
+                                }
+                            } else if (result.health.status === 'timeout') {
+                                healthStatus = `⏱️ **Timeout**\n${result.health.runningTasks}/${result.health.desiredReplicas} replicas running\n\nService is still starting up`;
+                            }
+                            
+                            successEmbed.addFields({
+                                name: '🏥 Service Health',
+                                value: healthStatus.substring(0, 1024)
                             });
                         }
-                    } else if (result.health.status === 'timeout') {
-                        healthStatus = `⏱️ **Timeout**\n${result.health.runningTasks}/${result.health.desiredReplicas} replicas running\n\nService is still starting up`;
-                    }
-                    
-                    successEmbed.addFields({
-                        name: '🏥 Service Health',
-                        value: healthStatus.substring(0, 1024)
-                    });
-                }
 
-                // Add node pull results with SHA digest
-                if (result.pullResults && result.pullResults.length > 0) {
-                    const successfulPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'success');
-                    const failedPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'failed');
-                    
-                    let pullResultsText = '';
-                    
-                    // Show successful pulls with digest info
-                    if (successfulPulls.length > 0) {
-                        pullResultsText += '✅ Success:\n';
-                        successfulPulls.forEach((r: ImagePullProgress, idx: number) => {
-                            pullResultsText += `--- Node ${idx + 1} ---\n`;
-                            const digest = r.digest ? `• Digest: \`${r.digest}\`` : '';
-                            const imageIdInfo = r.imageId ? `• Image ID: \`${r.imageId.slice(-12)}\`` : '';
-                            pullResultsText += `${digest}\n${imageIdInfo}\n`;
+        // Add node pull results with SHA digest
+        if (result.pullResults && result.pullResults.length > 0) {
+            const successfulPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'success');
+            const failedPulls = result.pullResults.filter((r: ImagePullProgress) => r.status === 'failed');
+            
+            let pullResultsText = '';
+            
+            // Show successful pulls with digest info
+            if (successfulPulls.length > 0) {
+                                pullResultsText += '✅ Success:\n';
+                                successfulPulls.forEach((r: ImagePullProgress, idx: number) => {
+                                    pullResultsText += `--- Node ${idx + 1} ---\n`;
+                                    const digest = r.digest ? `• Digest: \`${r.digest}\`` : '';
+                                    const imageIdInfo = r.imageId ? `• Image ID: \`${r.imageId.slice(-12)}\`` : '';
+                                    pullResultsText += `${digest}\n${imageIdInfo}\n`;
+                });
+            }
+            
+            // Show failed pulls
+            if (failedPulls.length > 0) {
+                                pullResultsText += '❌ Failed:\n';
+                failedPulls.forEach((r: ImagePullProgress) => {
+                                    pullResultsText += `• Node: ${r.node}: ${r.error || 'Unknown error'}\n`;
+                });
+            }
+
+            if (pullResultsText) {
+                successEmbed.addFields({
+                    name: '📦 Image Pull Results',
+                    value: pullResultsText.length > 1024 ? pullResultsText.substring(0, 1021) + '...' : pullResultsText
+                });
+            }
+        }
+
+                        await tagInteraction.editReply({ embeds: [successEmbed] });
+                    } catch (error: any) {
+                        console.error('Service deploy error:', error);
+                        
+                        const errorEmbed = new EmbedBuilder()
+                            .setColor(0xFF0000)
+                            .setTitle('❌ Deployment Error')
+                            .setDescription(error.message || 'An unknown error occurred during deployment')
+                            .setFooter({ text: 'Powered by MENI' })
+                            .setTimestamp();
+                        
+                        await tagInteraction.editReply({ embeds: [errorEmbed] });
+                    }
+                });
+                
+                tagCollector.on('end', (collected) => {
+                    if (collected.size === 0) {
+                        i.editReply({ 
+                            embeds: [new EmbedBuilder()
+                                .setColor(0xFF0000)
+                                .setTitle('⏰ Timeout')
+                                .setDescription('Tag selection timed out.')
+                                .setFooter({ text: 'Powered by MENI' })
+                                .setTimestamp()], 
+                            components: [] 
                         });
                     }
-                    
-                    // Show failed pulls
-                    if (failedPulls.length > 0) {
-                        pullResultsText += '❌ Failed:\n';
-                        failedPulls.forEach((r: ImagePullProgress) => {
-                            pullResultsText += `• Node: ${r.node}: ${r.error || 'Unknown error'}\n`;
-                        });
-                    }
-
-                    if (pullResultsText) {
-                        successEmbed.addFields({
-                            name: '📦 Image Pull Results',
-                            value: pullResultsText.length > 1024 ? pullResultsText.substring(0, 1021) + '...' : pullResultsText
-                        });
-                    }
-                }
-
-                await interaction.editReply({ embeds: [successEmbed] });
+                });
             } catch (error: any) {
-                console.error('Service deploy error:', error);
+                console.error('Fetch tags error:', error);
                 
                 const errorEmbed = new EmbedBuilder()
                     .setColor(0xFF0000)
-                    .setTitle('❌ Deployment Error')
-                    .setDescription(error.message || 'An unknown error occurred during deployment')
+                    .setTitle('❌ Failed to Fetch Tags')
+                    .setDescription(error.message || 'An unknown error occurred while fetching tags')
                     .setFooter({ text: 'Powered by MENI' })
                     .setTimestamp();
                 
-                await interaction.editReply({ embeds: [errorEmbed] });
+                await i.editReply({ embeds: [errorEmbed], components: [] });
             }
         });
 
@@ -714,7 +869,45 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
             });
 
             try {
-                const results = await client.deployMultipleServicesOptimized(endpointId, selectedServices);
+                // Fetch latest tags for all selected services
+                const serviceTags = new Map<string, string>();
+
+                // Check if user has GitLab token
+                const { hasGitLabToken } = await import('./gitlab');
+                const hasToken = await hasGitLabToken(i.user.id);
+
+                if (hasToken) {
+                    // Get user's GitLab token
+                    const { getGitLabToken } = await import('./gitlab');
+                    const userToken = await getGitLabToken(i.user.id);
+
+                    if (userToken) {
+                        const { GitLabClient } = await import('../utils/gitlabClient');
+                        const gitlabUrl = process.env.GITLAB_URL;
+
+                        if (gitlabUrl) {
+                            const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
+
+                            // Fetch latest tag for each service
+                            for (const serviceName of selectedServices) {
+                                try {
+                                    const projectId = getGitLabProjectId(serviceName);
+                                    if (projectId) {
+                                        const tags = await gitlabClient.getProjectTags(projectId, 1);
+                                        if (tags.length > 0) {
+                                            serviceTags.set(serviceName, tags[0].name);
+                                            console.log(`📋 Using latest tag "${tags[0].name}" for service "${serviceName}"`);
+                                        }
+                                    }
+                                } catch (error: any) {
+                                    console.warn(`⚠️ Failed to fetch latest tag for ${serviceName}:`, error.message);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                const results = await client.deployMultipleServicesOptimized(endpointId, selectedServices, serviceTags);
                 
                 const successCount = results.results.filter((r: any) => r.success).length;
                 const failCount = results.results.length - successCount;
@@ -726,7 +919,7 @@ async function handleMultiDeploy(interaction: ChatInputCommandInteraction, clien
                 } else if (successCount === 0) {
                     embedColor = 0xFF0000; // Red for all failed
                 }
-
+                
                 const resultEmbed = new EmbedBuilder()
                     .setColor(embedColor)
                     .setTitle(successCount === selectedServices.length 

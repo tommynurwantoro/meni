@@ -188,7 +188,7 @@ class PortainerClient {
     /**
      * Pull image on a specific node using Portainer's Docker proxy
      */
-    async pullImageOnNode(endpointId: number, nodeId: string, imageName: string): Promise<{ digest?: string; imageId?: string }> {
+    async pullImageOnNode(endpointId: number, nodeId: string, imageName: string, tag: string): Promise<{ digest?: string; imageId?: string }> {
         try {
                 // Get ECR auth token dynamically
                 const ecrAuthToken = await this.getEcrAuthToken();
@@ -202,7 +202,7 @@ class PortainerClient {
                     {
                         params: {
                             fromImage: imageWithoutDigest,
-                            tag: 'dev',
+                            tag: tag,
                         },
                         headers: {
                             'X-Registry-Auth': ecrAuthToken,
@@ -239,7 +239,7 @@ class PortainerClient {
     /**
      * Pull image across all swarm nodes
      */
-    async pullImageOnAllNodes(endpointId: number, imageName: string): Promise<ImagePullProgress[]> {
+    async pullImageOnAllNodes(endpointId: number, imageName: string, tag: string): Promise<ImagePullProgress[]> {
         const nodes = await this.getSwarmNodes(endpointId);
         const results: ImagePullProgress[] = [];
 
@@ -253,7 +253,7 @@ class PortainerClient {
         // Pull image on all nodes in parallel
         const pullPromises = readyNodes.map(async (node) => {
             try {
-                const pullResult = await this.pullImageOnNode(endpointId, node.ID, imageName);
+                const pullResult = await this.pullImageOnNode(endpointId, node.ID, imageName, tag);
                 const result: ImagePullProgress = {
                     node: node.Hostname || node.ID,
                     status: 'success',
@@ -484,7 +484,7 @@ class PortainerClient {
     /**
      * Main deployment workflow: pull image on all nodes, update service, and check health
      */
-    async deployService(endpointId: number, serviceName: string, checkHealth: boolean = true): Promise<{
+    async deployService(endpointId: number, serviceName: string, tag?: string, checkHealth: boolean = true): Promise<{
         pullResults: ImagePullProgress[];
         serviceUpdated: boolean;
         health?: {
@@ -504,11 +504,21 @@ class PortainerClient {
                 throw new Error(`Service "${serviceName}" not found`);
             }
 
-            const imageName = service.Spec.TaskTemplate.ContainerSpec.Image;
-            console.log(`🚀 Deploying: ${serviceName}`);
+            let imageName = service.Spec.TaskTemplate.ContainerSpec.Image;
+            
+            // If tag is provided, replace the tag in the image name
+            if (tag) {
+                // Remove existing tag/digest if present
+                const imageWithoutTag = imageName.split(':')[0].split('@')[0];
+                imageName = `${imageWithoutTag}:${tag}`;
+                console.log(`🚀 Deploying: ${serviceName} with tag: ${tag}`);
+                console.log(`📦 Image: ${imageName}`);
+            } else {
+                console.log(`🚀 Deploying: ${serviceName}`);
+            }
 
             // Step 1: Pull image on all nodes
-            const pullResults = await this.pullImageOnAllNodes(endpointId, imageName);
+            const pullResults = await this.pullImageOnAllNodes(endpointId, imageName, tag || 'dev');
 
             // Check if at least one node succeeded
             const successCount = pullResults.filter(r => r.status === 'success').length;
@@ -516,7 +526,11 @@ class PortainerClient {
                 throw new Error('Failed to pull image on any node');
             }
 
-            // Step 2: Update the service
+            // Step 2: Update the service with new image
+            if (tag) {
+                // Update the service spec with the new image
+                service.Spec.TaskTemplate.ContainerSpec.Image = imageName;
+            }
             await this.updateService(endpointId, service.ID, service);
 
             // Step 3: Check service health (optional)
@@ -550,7 +564,7 @@ class PortainerClient {
      * 1. Pull unique images once
      * 2. Update all services that use those images
      */
-    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[], checkHealth: boolean = true): Promise<{
+    async deployMultipleServicesOptimized(endpointId: number, serviceNames: string[], tags?: Map<string, string>, checkHealth: boolean = true): Promise<{
         results: Array<{
             serviceName: string;
             success: boolean;
@@ -607,23 +621,37 @@ class PortainerClient {
                 return { results, imagePullResults };
             }
 
-            // Step 2: Group services by image
-            const servicesByImage = new Map<string, Service[]>();
+            // Step 2: Group services by final image (including tag)
+            const servicesByImage = new Map<string, { services: Service[], tag?: string }>();
             validServices.forEach(service => {
-                const image = service.Spec.TaskTemplate.ContainerSpec.Image;
-                if (!servicesByImage.has(image)) {
-                    servicesByImage.set(image, []);
+                const baseImage = service.Spec.TaskTemplate.ContainerSpec.Image;
+                const serviceTag = tags?.get(service.Spec.Name);
+                let finalImage: string;
+                let tag: string | undefined;
+
+                if (serviceTag) {
+                    // Remove existing tag/digest if present and add the new tag
+                    const imageWithoutTag = baseImage.split(':')[0].split('@')[0];
+                    finalImage = `${imageWithoutTag}:${serviceTag}`;
+                    tag = serviceTag;
+                } else {
+                    finalImage = baseImage;
                 }
-                servicesByImage.get(image)!.push(service);
+
+                if (!servicesByImage.has(finalImage)) {
+                    servicesByImage.set(finalImage, { services: [], tag });
+                }
+                servicesByImage.get(finalImage)!.services.push(service);
             });
 
             console.log(`📦 Found ${servicesByImage.size} unique image(s) to pull`);
 
             // Step 3: Pull each unique image once
-            for (const [image, servicesUsingImage] of servicesByImage.entries()) {
+            for (const [image, imageData] of servicesByImage.entries()) {
+                const { services: servicesUsingImage, tag } = imageData;
                 console.log(`🔄 Pulling image for ${servicesUsingImage.length} service(s)...`);
                 try {
-                    const pullResults = await this.pullImageOnAllNodes(endpointId, image);
+                    const pullResults = await this.pullImageOnAllNodes(endpointId, image, tag || 'dev');
                     imagePullResults.set(image, pullResults);
 
                     // Check if pull was successful
@@ -644,6 +672,10 @@ class PortainerClient {
                     // Step 4: Update all services that use this image
                     for (const service of servicesUsingImage) {
                         try {
+                            // Update service spec with the final image if tag was specified
+                            if (tag) {
+                                service.Spec.TaskTemplate.ContainerSpec.Image = image;
+                            }
                             await this.updateService(endpointId, service.ID, service);
                             
                             // Step 5: Check health if enabled
