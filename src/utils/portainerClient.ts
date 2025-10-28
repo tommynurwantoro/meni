@@ -370,8 +370,8 @@ class PortainerClient {
     }
 
     /**
-     * Check service health after deployment
-     * Returns status of running tasks and any failures
+     * Advanced health check with retry logic and preparation state handling
+     * Returns detailed status of service deployment progress
      */
     async checkServiceHealth(endpointId: number, serviceName: string, timeoutMs: number = 60000): Promise<{
         healthy: boolean;
@@ -380,11 +380,14 @@ class PortainerClient {
         desiredReplicas: number;
         failedTasks: Array<{ node: string; error: string; state: string }>;
         message: string;
+        deploymentProgress?: string;
+        availabilityHistory?: Array<{ timestamp: number; running: number; desired: number; status: string }>;
     }> {
         const startTime = Date.now();
         const pollInterval = 3000; // Check every 3 seconds
+        const availabilityHistory: Array<{ timestamp: number; running: number; desired: number; status: string }> = [];
 
-        console.log(`🔍 Checking health for service: ${serviceName}`);
+        console.log(`🔍 Starting advanced health check for service: ${serviceName} (timeout: ${timeoutMs / 1000}s)`);
 
         try {
             const service = await this.getServiceByName(endpointId, serviceName);
@@ -393,58 +396,129 @@ class PortainerClient {
             }
 
             const desiredReplicas = (service.Spec as any).Mode?.Replicated?.Replicas || 1;
+            let consecutiveHealthyChecks = 0;
+            let maxRunningSeen = 0;
+            let preparationStartTime = 0;
+            let steadyStateThreshold = 0.7; // 70% of desired replicas considered "substantial progress"
+
+            console.log(`📊 Target: ${desiredReplicas} replica(s) for service "${serviceName}"`);
 
             // Poll until timeout or service is healthy
             while (Date.now() - startTime < timeoutMs) {
                 const tasks = await this.getServiceTasks(endpointId, service.ID);
+                const currentTime = Date.now();
                 
-                // Filter for the latest tasks (ignore old/shutdown tasks)
+                // Get task states with detailed information
                 const runningTasks = tasks.filter((task: any) => task.Status.State === 'running');
                 const failedTasks = tasks.filter((task: any) => 
-                    task.Status.State === 'failed' || 
-                    task.Status.State === 'rejected'
+                    task.Status.State === 'failed' || task.Status.State === 'rejected'
                 );
                 const preparingTasks = tasks.filter((task: any) => 
                     task.Status.State === 'preparing' || 
                     task.Status.State === 'starting' ||
-                    task.Status.State === 'assigned'
+                    task.Status.State === 'assigned' ||
+                    task.Status.State === 'new'
                 );
 
-                console.log(`📊 Service status: ${runningTasks.length}/${desiredReplicas} running, ${preparingTasks.length} starting, ${failedTasks.length} failed`);
+                // Track maximum running tasks seen
+                maxRunningSeen = Math.max(maxRunningSeen, runningTasks.length);
 
-                // Check if service is healthy (all replicas running)
+                // Record availability history
+                availabilityHistory.push({
+                    timestamp: currentTime,
+                    running: runningTasks.length,
+                    desired: desiredReplicas,
+                    status: runningTasks.length >= desiredReplicas ? 'healthy' : 'preparing'
+                });
+
+                // Calculate deployment progress
+                const progressPercent = Math.round((runningTasks.length / desiredReplicas) * 100);
+                const deploymentProgress = `${runningTasks.length}/${desiredReplicas} (${progressPercent}%)`;
+
+                console.log(`📊 Service status: ${deploymentProgress} running, ${preparingTasks.length} preparing, ${failedTasks.length} failed | Total Tasks: ${tasks.length}`);
+
+                // Check if service is healthy (all replicas running and stable)
                 if (runningTasks.length === desiredReplicas && preparingTasks.length === 0) {
-                    return {
-                        healthy: true,
-                        status: 'running',
-                        runningTasks: runningTasks.length,
-                        desiredReplicas,
-                        failedTasks: [],
-                        message: `✅ Service is healthy. All ${desiredReplicas} replica(s) are running.`
-                    };
-                }
-
-                // check if failed task is greater than 0 and timestamp is more than latest running task
-                const latestRunningTask = runningTasks.sort((a: any, b: any) => new Date(b.Status.Timestamp).getTime() - new Date(a.Status.Timestamp).getTime())[0];
-                const newFailedTasks = failedTasks.filter((task: any) => new Date(task.Status.Timestamp).getTime() > new Date(latestRunningTask.Status.Timestamp).getTime());
-                // Check for failed tasks
-                if (newFailedTasks.length > 0) {
-                    const failedTaskDetails = newFailedTasks.map((task: any) => ({
-                        node: task.NodeID || 'unknown',
-                        error: task.Status.Err || task.Status.Message || 'Unknown error',
-                        state: task.Status.State
-                    }));
-
-                    // If there are failed tasks but also running ones, it might still be deploying
-                    if (runningTasks.length < desiredReplicas && preparingTasks.length === 0) {
+                    consecutiveHealthyChecks++;
+                    
+                    // Require 2 consecutive healthy checks for stability
+                    if (consecutiveHealthyChecks >= 2) {
+                        console.log(`✅ Service "${serviceName}" confirmed healthy after ${consecutiveHealthyChecks} stable checks`);
                         return {
-                            healthy: false,
-                            status: 'failed',
+                            healthy: true,
+                            status: 'running',
                             runningTasks: runningTasks.length,
                             desiredReplicas,
-                            failedTasks: failedTaskDetails,
-                            message: `❌ Service deployment failed. ${runningTasks.length}/${desiredReplicas} running, ${failedTasks.length} failed.`
+                            failedTasks: [],
+                            message: `✅ Service is healthy and stable. All ${desiredReplicas} replica(s) running successfully.`,
+                            deploymentProgress: deploymentProgress,
+                            availabilityHistory
                         };
+                    }
+                } else {
+                    consecutiveHealthyChecks = 0; // Reset stability counter
+                }
+
+                // Enhanced failure detection
+                if (failedTasks.length > 0) {
+                    const latestRunningTask = runningTasks.length > 0 
+                        ? runningTasks.sort((a: any, b: any) => new Date(b.Status.Timestamp).getTime() - new Date(a.Status.Timestamp).getTime())[0]
+                        : null;
+
+                    const newFailedTasks = latestRunningTask 
+                        ? failedTasks.filter((task: any) => new Date(task.Status.Timestamp).getTime() > new Date(latestRunningTask.Status.Timestamp).getTime())
+                        : failedTasks;
+
+                    if (newFailedTasks.length > 0) {
+                        const failedTaskDetails = newFailedTasks.map((task: any) => ({
+                            node: task.NodeID || 'unknown',
+                            error: task.Status.Err || task.Status.Message || 'Unknown error',
+                            state: task.Status.State
+                        }));
+
+                        // More intelligent failure assessment
+                        if (runningTasks.length === 0 && preparingTasks.length === 0) {
+                            return {
+                                healthy: false,
+                                status: 'failed',
+                                runningTasks: runningTasks.length,
+                                desiredReplicas,
+                                failedTasks: failedTaskDetails,
+                                message: `❌ Service deployment failed completely. 0/${desiredReplicas} running, ${newFailedTasks.length} failed.`,
+                                deploymentProgress,
+                                availabilityHistory
+                            };
+                        } else if (runningTasks.length < steadyStateThreshold * desiredReplicas) {
+                            return {
+                                healthy: false,
+                                status: 'degraded',
+                                runningTasks: runningTasks.length,
+                                desiredReplicas,
+                                failedTasks: failedTaskDetails,
+                                message: `⚠️ Service deployment degraded. ${runningTasks.length}/${desiredReplicas} running, insufficient for healthy state.`,
+                                deploymentProgress,
+                                availabilityHistory
+                            };
+                        }
+                    }
+                }
+
+                // Handle preparation state with progressive timeouts
+                if (preparingTasks.length > 0) {
+                    if (preparationStartTime === 0) {
+                        preparationStartTime = currentTime;
+                        console.log(`🔄 Service "${serviceName}" entered preparation state`);
+                    }
+
+                    const preparationDuration = currentTime - preparationStartTime;
+                    const maxPreparationTime = 60000; // 1 minute max for preparation
+                    
+                    // Progressive timeout based on progress
+                    const hasSubstantialProgress = maxRunningSeen >= steadyStateThreshold * desiredReplicas;
+                    const effectiveTimeout = hasSubstantialProgress ? maxPreparationTime * 2 : maxPreparationTime;
+
+                    if (preparationDuration > effectiveTimeout) {
+                        console.warn(`⏱️ Preparation timeout: ${preparationDuration / 1000}s, max seen: ${maxRunningSeen}/${desiredReplicas}`);
                     }
                 }
 
@@ -452,27 +526,40 @@ class PortainerClient {
                 await new Promise(resolve => setTimeout(resolve, pollInterval));
             }
 
-            // Timeout reached
-            const tasks = await this.getServiceTasks(endpointId, service.ID);
-            const runningTasks = tasks.filter((task: any) => task.Status.State === 'running');
-            const failedTasks = tasks.filter((task: any) => 
-                task.Status.State === 'failed' || 
-                task.Status.State === 'rejected'
+            // Timeout reached - provide detailed analysis
+            const finalTasks = await this.getServiceTasks(endpointId, service.ID);
+            const finalRunningTasks = finalTasks.filter((task: any) => task.Status.State === 'running');
+            const finalFailedTasks = finalTasks.filter((task: any) => 
+                task.Status.State === 'failed' || task.Status.State === 'rejected'
             );
 
-            const failedTaskDetails = failedTasks.map((task: any) => ({
+            const failedTaskDetails = finalFailedTasks.map((task: any) => ({
                 node: task.NodeID || 'unknown',
                 error: task.Status.Err || task.Status.Message || 'Unknown error',
                 state: task.Status.State
             }));
 
+            const finalProgress = Math.round((finalRunningTasks.length / desiredReplicas) * 100);
+            
+            // More intelligent timeout assessment
+            let timeoutMessage = `⏱️ Health check timeout after ${timeoutMs / 1000}s.`;
+            if (finalRunningTasks.length >= steadyStateThreshold * desiredReplicas) {
+                timeoutMessage += ` ${finalRunningTasks.length}/${desiredReplicas} running (${finalProgress}%). Service partially deployed - may need more time.`;
+            } else if (finalRunningTasks.length > 0) {
+                timeoutMessage += ` ${finalRunningTasks.length}/${desiredReplicas} running (${finalProgress}%). Service partially deployed but insufficient.`;
+            } else {
+                timeoutMessage += ` 0/${desiredReplicas} running. Deployment appears to have failed.`;
+            }
+
             return {
                 healthy: false,
                 status: 'timeout',
-                runningTasks: runningTasks.length,
+                runningTasks: finalRunningTasks.length,
                 desiredReplicas,
                 failedTasks: failedTaskDetails,
-                message: `⏱️ Health check timeout. ${runningTasks.length}/${desiredReplicas} running after ${timeoutMs / 1000}s.`
+                message: timeoutMessage,
+                deploymentProgress: `${finalRunningTasks.length}/${desiredReplicas} (${finalProgress}%)`,
+                availabilityHistory
             };
 
         } catch (error: any) {
@@ -661,6 +748,41 @@ class PortainerClient {
             return { results, imagePullResults };
         } catch (error: any) {
             throw new Error(`Multi-deployment failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Trigger a stack webhook to initiate deployment
+     */
+    async triggerStackWebhook(webhookId: string): Promise<{
+        success: boolean;
+        status: string;
+        message: string;
+    }> {
+        try {
+            console.log(`🪝 Triggering webhook: ${webhookId}`);
+            
+            const response = await this.client.post(
+                `/api/stacks/webhooks/${webhookId}`,
+                null,
+                {
+                    timeout: 30000, // 30 seconds timeout
+                }
+            );
+
+            console.log(`✅ Webhook triggered successfully: ${webhookId}`);
+            return {
+                success: true,
+                status: 'triggered',
+                message: 'Webhook triggered successfully'
+            };
+        } catch (error: any) {
+            console.error(`❌ Failed to trigger webhook ${webhookId}:`, error.response?.data?.message || error.message);
+            return {
+                success: false,
+                status: 'failed',
+                message: `Webhook trigger failed: ${error.response?.data?.message || error.message}`
+            };
         }
     }
 

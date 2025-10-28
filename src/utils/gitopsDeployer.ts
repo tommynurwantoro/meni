@@ -17,6 +17,7 @@ interface ServiceConfig {
     gitOpsBranch: string;
     stackName?: string;
     serviceName?: string;
+    gitOpsWebhook?: string;
 }
 
 interface DeploymentResult {
@@ -31,6 +32,20 @@ interface DeploymentResult {
         commitId: string;
         branch: string;
         filePath: string;
+    };
+    webhookResult?: {
+        success: boolean;
+        message: string;
+    };
+    healthCheckResult?: {
+        healthy: boolean;
+        status: string;
+        runningTasks: number;
+        desiredReplicas: number;
+        failedTasks: Array<{ node: string; error: string; state: string }>;
+        message: string;
+        deploymentProgress?: string;
+        availabilityHistory?: Array<{ timestamp: number; running: number; desired: number; status: string }>;
     };
     message: string;
 }
@@ -116,7 +131,49 @@ async function deployServiceViaGitOps(
             throw new Error(`Failed to commit GitOps configuration: ${error.message}`);
         }
 
-        console.log(`✅ GitOps deployment queued for ${serviceName} (commit: ${gitLabCommit.commit_id})`);
+        let webhookResult = null;
+        let healthCheckResult = null;
+        let finalMessage = `✅ Successfully pre-pulled ${serviceName} image and updated GitOps configuration. GitOps will deploy automatically.`;
+
+        // Step 6: Trigger webhook if available
+        if (serviceConfig.gitOpsWebhook) {
+            console.log(`🪝 Triggering webhook for ${serviceName}...`);
+            webhookResult = await portainerClient.triggerStackWebhook(serviceConfig.gitOpsWebhook);
+            
+            if (webhookResult.success) {
+                console.log(`✅ Webhook triggered successfully for ${serviceName}`);
+                
+                // Step 7: Perform health check after webhook trigger
+                // For health checks, always use the original stack service name (not the mapped YAML name)
+                const healthCheckServiceName = serviceName;
+                console.log(`🔍 Starting health check for ${healthCheckServiceName} (original stack service)...`);
+                try {
+                    healthCheckResult = await portainerClient.checkServiceHealth(endpointId, healthCheckServiceName, 120000); // 2 minutes timeout
+                    
+                    if (healthCheckResult.healthy) {
+                        finalMessage = `✅ Deployment completed successfully! ${healthCheckServiceName} is running and healthy.`;
+                    } else {
+                        finalMessage = `⚠️ Deployment triggered but health check failed: ${healthCheckResult.message}`;
+                    }
+                } catch (error: any) {
+                    console.warn(`⚠️ Health check failed for ${healthCheckServiceName}:`, error.message);
+                    healthCheckResult = {
+                        healthy: false,
+                        status: 'error',
+                        runningTasks: 0,
+                        desiredReplicas: 1,
+                        failedTasks: [],
+                        message: `Health check error: ${error.message}`
+                    };
+                    finalMessage = `⚠️ Deployment triggered but health check encountered an error: ${error.message}`;
+                }
+            } else {
+                console.warn(`⚠️ Webhook trigger failed for ${serviceName}: ${webhookResult.message}`);
+                finalMessage = `⚠️ GitOps configuration updated but webhook trigger failed: ${webhookResult.message}`;
+            }
+        }
+
+        console.log(`✅ GitOps deployment ${finalMessage}`);
 
         return {
             success: true,
@@ -131,7 +188,21 @@ async function deployServiceViaGitOps(
                 branch: gitLabCommit.branch,
                 filePath: gitLabCommit.file_path
             },
-            message: `✅ Successfully pre-pulled ${serviceName} image and updated GitOps configuration. GitOps will deploy automatically.`
+            webhookResult: webhookResult ? {
+                success: webhookResult.success,
+                message: webhookResult.message
+            } : undefined,
+            healthCheckResult: healthCheckResult ? {
+                healthy: healthCheckResult.healthy,
+                status: healthCheckResult.status,
+                runningTasks: healthCheckResult.runningTasks,
+                desiredReplicas: healthCheckResult.desiredReplicas,
+                failedTasks: healthCheckResult.failedTasks,
+                message: healthCheckResult.message,
+                deploymentProgress: healthCheckResult.deploymentProgress,
+                availabilityHistory: healthCheckResult.availabilityHistory
+            } : undefined,
+            message: finalMessage
         };
     } catch (error: any) {
         console.error(`❌ GitOps deployment failed for ${serviceName}:`, error.message);

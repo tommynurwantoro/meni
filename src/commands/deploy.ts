@@ -33,6 +33,7 @@ interface ServiceMapping {
     gitOpsBranch?: string;
     stackName?: string;
     serviceName?: string;
+    gitOpsWebhook?: string;
 }
 
 interface WhitelistConfig {
@@ -128,6 +129,7 @@ function getServiceConfig(serviceName: string): ServiceConfig | null {
         gitOpsBranch: mapping.gitOpsBranch,
         stackName: mapping.stackName,
         serviceName: mapping.serviceName,
+        gitOpsWebhook: mapping.gitOpsWebhook,
     };
 }
 
@@ -636,8 +638,8 @@ async function handleServiceDeploy(
                         // Determine embed color and title based on success/failure
                         let embedColor = result.success ? 0x00ff00 : 0xff0000; // Green or Red
                         let title = result.success
-                            ? "✅ GitOps Deployment Initiated"
-                            : "❌ GitOps Deployment Failed";
+                            ? "✅ Deployment Initiated"
+                            : "❌ Deployment Failed";
 
                         // Create success embed with pull results and GitOps info
                         const successEmbed = new EmbedBuilder()
@@ -731,18 +733,67 @@ async function handleServiceDeploy(
                             }
                         }
 
+                        // Add health check result
+                        if (result.healthCheckResult) {
+                            const healthStatus = result.healthCheckResult.healthy ? "✅" : "❌";
+                            let healthDetails = "";
+                            
+                            if (result.healthCheckResult.healthy) {
+                                healthDetails = `All ${result.healthCheckResult.runningTasks}/${result.healthCheckResult.desiredReplicas} replicas running ✨`;
+                            } else {
+                                const deploymentProgress = result.healthCheckResult.deploymentProgress || `${result.healthCheckResult.runningTasks}/${result.healthCheckResult.desiredReplicas}`;
+                                healthDetails = `${deploymentProgress} running - ${result.healthCheckResult.status}`;
+                            }
+                            
+                            // Add availability insights if available
+                            let availabilityInsights = "";
+                            if (result.healthCheckResult.availabilityHistory && result.healthCheckResult.availabilityHistory.length > 0) {
+                                const history = result.healthCheckResult.availabilityHistory;
+                                const maxRunning = Math.max(...history.map(h => h.running));
+                                const totalChecks = history.length;
+                                const healthyChecks = history.filter(h => h.status === 'healthy').length;
+                                
+                                if (maxRunning > 0 && maxRunning < result.healthCheckResult.desiredReplicas) {
+                                    availabilityInsights = `\n📈 Max reached: ${maxRunning}/${result.healthCheckResult.desiredReplicas} (${Math.round((maxRunning/result.healthCheckResult.desiredReplicas)*100)}%)`;
+                                }
+                            }
+                            
+                            const healthMessage = `${healthStatus} ${healthDetails}${availabilityInsights}`;
+                            
+                            successEmbed.addFields({
+                                name: "🔍 Advanced Health Check",
+                                value: healthMessage,
+                            });
+                            
+                            // Add detailed failure information if available
+                            if (!result.healthCheckResult.healthy && result.healthCheckResult.failedTasks.length > 0) {
+                                const failureDetails = result.healthCheckResult.failedTasks.slice(0, 3).map(task => 
+                                    `• ${task.state}: ${task.error.substring(0, 50)}${task.error.length > 50 ? '...' : ''}`
+                                ).join('\n');
+                                
+                                const failureField = failureDetails.length > 1024 
+                                    ? failureDetails.substring(0, 1021) + "..."
+                                    : failureDetails;
+                                
+                                successEmbed.addFields({
+                                    name: "⚠️ Failure Details",
+                                    value: failureField,
+                                });
+                            }
+                        }
+
                         await tagInteraction.editReply({
                             embeds: [successEmbed],
                         });
                     } catch (error: any) {
-                        console.error("GitOps deploy error:", error);
+                        console.error("Deploy error:", error);
 
                         const errorEmbed = new EmbedBuilder()
                             .setColor(0xff0000)
-                            .setTitle("❌ GitOps Deployment Error")
+                            .setTitle("❌ Deployment Error")
                             .setDescription(
                                 error.message ||
-                                    "An unknown error occurred during GitOps deployment"
+                                    "An unknown error occurred during deployment"
                             )
                             .setFooter({ text: "Powered by MENI" })
                             .setTimestamp();
@@ -1247,16 +1298,16 @@ async function handleMultiDeploy(
                     .setColor(embedColor)
                     .setTitle(
                         successCount === selectedServices.length
-                            ? "✅ All GitOps Deployments Initiated"
+                            ? "✅ All Deployments Initiated"
                             : failCount === selectedServices.length
-                            ? "❌ All GitOps Deployments Failed"
-                            : "⚠️ Partial GitOps Deployment Success"
+                            ? "❌ All Deployments Failed"
+                            : "⚠️ Partial Deployment Success"
                     )
                     .setDescription(
                         `**Successful:** ${successCount} / ${selectedServices.length} | **Failed:** ${failCount}`
                     )
                     .setFooter({
-                        text: "GitOps will deploy the changes automatically",
+                        text: "Deployment will deploy the changes automatically",
                     })
                     .setTimestamp();
 
