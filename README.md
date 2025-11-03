@@ -184,27 +184,6 @@ Deploy and manage Docker Swarm services through Portainer API.
   - `endpoint`: Portainer endpoint ID
 - **Features**: Paginated list with service names and image tags
 
-#### `/deploy multi`
-- **Description**: Deploy multiple services using GitOps workflow with optimized image pre-pulling
-- **Usage**: `/deploy multi endpoint:1`
-- **Parameters**:
-  - `endpoint`: Portainer endpoint ID
-- **Features**: 
-  - Interactive service selection menu
-  - Deploy up to 25 services at once
-  - **Optimized pre-pulling**: Groups services by image and pulls each unique image only once
-  - **Batch GitOps updates**: Updates docker-compose.yml for all services, batching by repository
-  - **GitOps handles deployment**: Your GitOps system picks up the changes
-  - Significantly reduces deployment time when multiple services share the same image
-  - Detailed results with commit information and pre-pull status
-  - Shows which repositories were updated with which services
-
-**GitOps Benefits:**
-- Single commit per repository (even for multiple services)
-- Atomic updates - all services in a repo update together
-- Your GitOps system handles the actual deployment
-- Includes repository grouping information in results
-
 #### `/deploy status`
 - **Description**: Check Portainer connection status
 - **Usage**: `/deploy status`
@@ -262,28 +241,6 @@ Quick start:
 4. **Track Results**: Bot shows pre-pull status and GitLab commit information
 
 For implementation details, see [Integration Summary](INTEGRATION_SUMMARY.md).
-
-### ⚡ Optimized Multi-Service Pre-pulling with GitOps
-
-The bot uses an optimized image pre-pulling strategy for multiple services that significantly reduces deployment time:
-
-**How it works:**
-1. **Group by Image**: Services are grouped by their container image
-2. **Pre-pull Once**: Each unique image is pulled once across all cluster nodes (caching)
-3. **Batch GitOps Updates**: Updates docker-compose.yml files, grouping by repository
-4. **GitOps Deployment**: Your GitOps system handles the actual service updates
-
-**Example:**
-If you deploy 10 services where 8 use `app:latest` and 2 use `worker:latest`:
-- **Old behavior**: Pull `app:latest` 8 times + Pull `worker:latest` 2 times = 10 pulls
-- **New behavior**: Pull `app:latest` once + Pull `worker:latest` once = 2 pulls
-
-**Benefits:**
-- ⚡ 5-10x faster image pre-pulling for services sharing images
-- 📉 Reduced network bandwidth usage through caching
-- 🔄 GitOps handles coordinated service updates
-- 💾 Lower registry API load with batch updates
-- ✅ Atomic updates via GitOps (single commits per repository)
 
 ### 🔄 GitOps Deployment Integration
 
@@ -498,7 +455,6 @@ src/
 - **Docker Swarm Support**: Designed for multi-node swarm clusters
 - **Pre-pull Images**: Pulls images to all nodes before deployment
 - **Fast Deployments**: Pre-cached images enable instant service updates
-- **Multi-Service Support**: Deploy multiple services at once
 - **Interactive UI**: Discord-native buttons and select menus
 - **Detailed Logging**: Node-by-node status and results
 - **Flexible Authentication**: API key or username/password support
