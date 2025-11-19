@@ -6,6 +6,14 @@ import { getReviewQueueData, updateReviewMessage } from "../utils/reviewUtils";
 import { addPoints, notifyThanksMessage } from "../utils/pointsUtils";
 import { PointsTransaction } from "../models/PointsTransaction";
 import { redisManager } from "../utils/redis";
+import { getServiceConfig } from "../utils/deploymentConfig";
+import {
+  updateImageTagInYaml,
+  extractCurrentImageTag,
+  validateServiceExists,
+  generateCommitMessage,
+  validateYamlContent
+} from "../utils/gitopsUtils";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
@@ -530,10 +538,10 @@ async function handleDoneReviewModal(
     if (review.total_pending === 0) {
       await review.destroy();
     }
-    
+
     // send new message to reviewer
     if (interaction.channel && "send" in interaction.channel) {
-    await interaction.channel?.send({
+      await interaction.channel?.send({
         content: `<@${review.reporter}> -- **[${review.title}](${review.url})** has been marked as done by <@${interaction.user.id}>`,
       });
     }
@@ -780,9 +788,9 @@ async function handleGitLabTokenModal(interaction: ModalSubmitInteraction) {
       .setTitle("✅ Token Saved Successfully")
       .setDescription(
         "Your GitLab personal access token has been encrypted and stored securely.\n\n" +
-          "You can now use GitLab features like:\n" +
-          "• `/deploy tags` - View repository tags\n" +
-          "• `/deploy create-tag` - Create new tags"
+        "You can now use GitLab features like:\n" +
+        "• `/deploy tags` - View repository tags\n" +
+        "• `/deploy create-tag` - Create new tags"
       )
       .addFields({
         name: "Security",
@@ -859,7 +867,7 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
     // Get user's GitLab token
     const { getGitLabToken } = await import("../commands/gitlab");
     const userToken = await getGitLabToken(interaction.user.id);
-    
+
     if (!userToken) {
       const noTokenEmbed = new EmbedBuilder()
         .setColor(0xFF0000)
@@ -867,7 +875,7 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
         .setDescription("Your GitLab token could not be retrieved. Please set it again using `/gitlab token`.")
         .setFooter({ text: "Powered by MENI" })
         .setTimestamp();
-      
+
       await originalMessage.edit({ embeds: [noTokenEmbed], components: [] });
       return;
     }
@@ -875,21 +883,78 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
     // Import GitLab client and create instance with user's token
     const { GitLabClient } = await import("../utils/gitlabClient");
     const gitlabUrl = process.env.GITLAB_URL;
-    
+
     if (!gitlabUrl) {
       throw new Error("GitLab URL is not configured");
     }
-    
+
     const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
 
     // Create the tag (from main branch)
     const tag = await gitlabClient.createTag(projectId, tagName, "main", tagMessage);
 
+    // Update GitOps configuration if available
+    const serviceConfig = getServiceConfig(serviceName);
+    let gitOpsUpdateMsg = "";
+
+    if (serviceConfig) {
+      try {
+        // Update loading message
+        await originalMessage.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFFA500)
+              .setTitle("🔄 Updating GitOps")
+              .setDescription(`Updating GitOps configuration for **${serviceName}** to use tag **${tagName}**...`)
+              .setFooter({ text: "Powered by MENI" })
+              .setTimestamp()
+          ],
+          components: []
+        });
+
+        const actualServiceName = serviceConfig.serviceName || serviceName;
+
+        // Fetch YAML
+        const yamlContent = await gitlabClient.getFile(
+          serviceConfig.gitOpsRepoId,
+          serviceConfig.gitOpsFilePath,
+          serviceConfig.gitOpsBranch
+        );
+
+        // Validate service exists
+        if (!validateServiceExists(yamlContent, actualServiceName)) {
+          throw new Error(`Service "${actualServiceName}" not found in GitOps configuration file`);
+        }
+
+        // Update YAML
+        const currentTag = extractCurrentImageTag(yamlContent, actualServiceName);
+        let updatedYamlContent = updateImageTagInYaml(yamlContent, actualServiceName, tagName);
+
+        // Validate YAML
+        updatedYamlContent = validateYamlContent(updatedYamlContent);
+
+        // Commit
+        const commitMessage = generateCommitMessage(actualServiceName, tagName, currentTag || undefined);
+        await gitlabClient.updateFile(
+          serviceConfig.gitOpsRepoId,
+          serviceConfig.gitOpsFilePath,
+          serviceConfig.gitOpsBranch,
+          updatedYamlContent,
+          commitMessage
+        );
+
+        gitOpsUpdateMsg = "\n✅ GitOps configuration updated automatically.";
+      } catch (gitOpsError: any) {
+        console.error("GitOps update error:", gitOpsError);
+        gitOpsUpdateMsg = `\n⚠️ GitOps update failed: ${gitOpsError.message}`;
+      }
+    }
+
     // Success embed with user info
     const successEmbed = new EmbedBuilder()
       .setColor(0x00FF00)
       .setTitle("✅ Tag Created Successfully")
-      .setDescription(`Tag **${tagName}** has been created for **${serviceName}** in GitLab by <@${interaction.user.id}>`)
+      .setDescription(`Tag **${tagName}** has been created for **${serviceName}** in GitLab by <@${interaction.user.id}>${gitOpsUpdateMsg}`)
       .addFields(
         { name: "Tag Name", value: tagName, inline: true },
         { name: "Project ID", value: projectId, inline: true },
