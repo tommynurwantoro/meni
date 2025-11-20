@@ -4,8 +4,6 @@ import {
     EmbedBuilder,
     ActionRowBuilder,
     StringSelectMenuBuilder,
-    ButtonBuilder,
-    ButtonStyle,
     ComponentType,
     ModalBuilder,
     TextInputBuilder,
@@ -14,150 +12,112 @@ import {
 import {
     getPortainerClient,
     ImagePullProgress,
-    Service,
 } from "../utils/portainerClient";
-import {
-    deployServiceViaGitOps,
-    type ServiceConfig,
-} from "../utils/gitopsDeployer";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { GitLabClient } from "../utils/gitlabClient";
+import {
+    extractCurrentImageTag,
+} from "../utils/gitopsUtils";
 
-// Whitelist structure interfaces
-interface ServiceMapping {
-    gitlabProjectId: string;
-    description: string;
-    gitOpsRepoId?: string;
-    gitOpsFilePath?: string;
-    gitOpsBranch?: string;
-    stackName?: string;
-    serviceName?: string;
-    gitOpsWebhook?: string;
+// New whitelist structure interfaces matching whitelist_deploy.json
+interface EndpointConfig {
+    id: number;
+    stacks: string[];
 }
 
-interface WhitelistConfig {
+interface StackConfig {
     services: string[];
-    serviceMapping: Record<string, ServiceMapping>;
+    gitOpsRepoId: string;
+    gitOpsFilePath: string;
+    gitOpsBranch: string;
+    gitOpsWebhook: string;
+}
+
+interface ServiceConfig {
+    gitlabProjectId: string;
+    description: string;
+}
+
+interface WhitelistDeployConfig {
+    endpoints: EndpointConfig[];
+    stacks: Record<string, StackConfig>;
+    services: Record<string, ServiceConfig>;
     description?: string;
 }
 
-// Load whitelist configuration
-function getWhitelistConfig(): WhitelistConfig | null {
+// Load whitelist configuration from whitelist_deploy.json
+function getWhitelistConfig(): WhitelistDeployConfig | null {
     try {
-        const whitelistPath = join(process.cwd(), "whitelist_service.json");
+        const whitelistPath = join(process.cwd(), "whitelist_deploy.json");
         const whitelistData = readFileSync(whitelistPath, "utf-8");
         const whitelist = JSON.parse(whitelistData);
         return whitelist;
     } catch (error) {
         console.warn(
-            "⚠️ Could not load whitelist_service.json, showing all services"
+            "⚠️ Could not load whitelist_deploy.json, deployment features disabled"
         );
         return null;
     }
 }
 
-// Get list of whitelisted service names
-function getWhitelistedServices(): string[] {
+// Get all whitelisted endpoints
+function getWhitelistedEndpoints(): EndpointConfig[] {
     const config = getWhitelistConfig();
-
-    if (!config || !config.services) {
+    if (!config || !config.endpoints) {
         return [];
     }
-
-    return config.services;
+    return config.endpoints;
 }
 
-// Filter services based on whitelist
-function filterWhitelistedServices(services: Service[]): Service[] {
-    const whitelist = getWhitelistedServices();
-
-    // If whitelist is empty or not loaded, return all services
-    if (whitelist.length === 0) {
-        return services;
+// Get stack config for a stack name
+function getStackConfig(stackName: string): StackConfig | null {
+    const config = getWhitelistConfig();
+    if (!config || !config.stacks || !config.stacks[stackName]) {
+        return null;
     }
+    return config.stacks[stackName];
+}
 
-    // Filter services that are in the whitelist
-    return services.filter((service: Service) =>
-        whitelist.includes(service.Spec.Name)
-    );
+// Get service config (gitlabProjectId, description)
+function getServiceConfig(serviceName: string): ServiceConfig | null {
+    const config = getWhitelistConfig();
+    if (
+        !config ||
+        !config.services ||
+        !config.services[serviceName]
+    ) {
+        return null;
+    }
+    return config.services[serviceName];
+}
+
+// Get stacks for an endpoint
+function getStacksForEndpoint(endpointId: number): string[] {
+    const endpoints = getWhitelistedEndpoints();
+    const endpoint = endpoints.find((ep) => ep.id === endpointId);
+    return endpoint?.stacks || [];
+}
+
+// Get services for a stack
+function getServicesForStack(stackName: string): string[] {
+    const stackConfig = getStackConfig(stackName);
+    return stackConfig?.services || [];
 }
 
 // Get GitLab project ID for a service
 function getGitLabProjectId(serviceName: string): string | null {
-    const config = getWhitelistConfig();
-
-    if (
-        !config ||
-        !config.serviceMapping ||
-        !config.serviceMapping[serviceName]
-    ) {
-        return null;
-    }
-
-    return config.serviceMapping[serviceName].gitlabProjectId;
+    const serviceConfig = getServiceConfig(serviceName);
+    return serviceConfig?.gitlabProjectId || null;
 }
 
-// Get full service configuration for GitOps deployment
-function getServiceConfig(serviceName: string): ServiceConfig | null {
+// Get all services from all stacks
+function getAllServices(): string[] {
     const config = getWhitelistConfig();
-
-    if (
-        !config ||
-        !config.serviceMapping ||
-        !config.serviceMapping[serviceName]
-    ) {
-        return null;
-    }
-
-    const mapping = config.serviceMapping[serviceName];
-
-    // Check if required GitOps fields are present
-    if (
-        !mapping.gitOpsRepoId ||
-        !mapping.gitOpsFilePath ||
-        !mapping.gitOpsBranch
-    ) {
-        return null;
-    }
-
-    return {
-        gitlabProjectId: mapping.gitlabProjectId,
-        description: mapping.description,
-        gitOpsRepoId: mapping.gitOpsRepoId,
-        gitOpsFilePath: mapping.gitOpsFilePath,
-        gitOpsBranch: mapping.gitOpsBranch,
-        stackName: mapping.stackName,
-        serviceName: mapping.serviceName,
-        gitOpsWebhook: mapping.gitOpsWebhook,
-    };
-}
-
-// Load whitelist endpoints
-function getWhitelistedEndpoints(): number[] {
-    try {
-        const whitelistPath = join(process.cwd(), "whitelist_endpoint.json");
-        const whitelistData = readFileSync(whitelistPath, "utf-8");
-        const whitelist = JSON.parse(whitelistData);
-        return whitelist.endpoints || [];
-    } catch (error) {
-        console.warn(
-            "⚠️ Could not load whitelist_endpoint.json, allowing all endpoints"
-        );
+    if (!config || !config.services) {
         return [];
     }
-}
-
-// Check if endpoint is whitelisted
-function isEndpointWhitelisted(endpointId: number): boolean {
-    const whitelist = getWhitelistedEndpoints();
-
-    // If whitelist is empty or not loaded, allow all endpoints
-    if (whitelist.length === 0) {
-        return true;
-    }
-
-    // Check if endpoint is in the whitelist
-    return whitelist.includes(endpointId);
+    return Object.keys(config.services);
 }
 
 export const data = new SlashCommandBuilder()
@@ -165,36 +125,8 @@ export const data = new SlashCommandBuilder()
     .setDescription("Deploy services using Portainer API")
     .addSubcommand((subcommand) =>
         subcommand
-            .setName("service")
-            .setDescription("Deploy a specific service interactively")
-            .addIntegerOption((option) =>
-                option
-                    .setName("endpoint")
-                    .setDescription("Portainer endpoint ID")
-                    .setRequired(true)
-            )
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
             .setName("list")
-            .setDescription("List all available services")
-            .addIntegerOption((option) =>
-                option
-                    .setName("endpoint")
-                    .setDescription("Portainer endpoint ID")
-                    .setRequired(true)
-            )
-            .addStringOption((option) =>
-                option
-                    .setName("search")
-                    .setDescription("Search services by name (optional)")
-                    .setRequired(false)
-            )
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName("status")
-            .setDescription("Check Portainer connection status")
+            .setDescription("List all available endpoints and stacks to deploy")
     )
     .addSubcommand((subcommand) =>
         subcommand
@@ -205,6 +137,17 @@ export const data = new SlashCommandBuilder()
         subcommand
             .setName("create-tag")
             .setDescription("Create a new tag for a service in GitLab")
+    )
+    .addSubcommand((subcommand) =>
+        subcommand
+            .setName("stack")
+            .setDescription("Deploy a stack by pulling images and triggering webhook")
+            .addIntegerOption((option) =>
+                option
+                    .setName("endpoint")
+                    .setDescription("Portainer endpoint ID")
+                    .setRequired(true)
+            )
     );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -256,11 +199,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const client = getPortainerClient();
 
         switch (subcommand) {
-            case "service":
-                await handleServiceDeploy(interaction, client);
-                break;
             case "list":
-                await handleListServices(interaction, client);
+                await handleList(interaction);
                 break;
             case "tags":
                 await handleGetTags(interaction);
@@ -268,8 +208,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             case "create-tag":
                 await handleCreateTag(interaction);
                 break;
-            case "status":
-                await handleStatus(interaction, client);
+            case "stack":
+                await handleStackDeploy(interaction, client);
                 break;
         }
     } catch (error: any) {
@@ -289,773 +229,58 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
 }
 
-async function handleServiceDeploy(
-    interaction: ChatInputCommandInteraction,
-    client: any
-) {
-    const endpointId = interaction.options.getInteger("endpoint", true);
-
+/**
+ * Handle /deploy list command - Show all endpoints with their stacks
+ */
+async function handleList(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 
-    // Validate endpoint is whitelisted
-    if (!isEndpointWhitelisted(endpointId)) {
-        const notAllowedEmbed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle("❌ Access Denied")
-            .setDescription(
-                `Endpoint ID \`${endpointId}\` is not whitelisted for deployment.`
-            )
-            .setFooter({
-                text: "Contact admin to add this endpoint to the whitelist",
-            })
-            .setTimestamp();
-
-        await interaction.editReply({ embeds: [notAllowedEmbed] });
-        return;
-    }
-
     try {
-        const allServices = await client.getServices(endpointId);
+        const endpoints = getWhitelistedEndpoints();
+        const config = getWhitelistConfig();
 
-        // Filter services based on whitelist
-        const services = filterWhitelistedServices(allServices);
-
-        if (services.length === 0) {
-            const noServicesEmbed = new EmbedBuilder()
+        if (!config || endpoints.length === 0) {
+            const noConfigEmbed = new EmbedBuilder()
                 .setColor(0xffa500)
-                .setTitle("📋 Service Deployment")
+                .setTitle("📋 Available Endpoints and Stacks")
                 .setDescription(
-                    "No whitelisted services found in this endpoint."
+                    "No endpoints configured in whitelist_deploy.json."
                 )
-                .setFooter({ text: "Powered by MENI" })
+                .setFooter({ text: "Contact admin to configure endpoints" })
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [noServicesEmbed] });
+            await interaction.editReply({ embeds: [noConfigEmbed] });
             return;
         }
-
-        // Sort services alphabetically by name
-        const sortedServices = services.sort((a: Service, b: Service) =>
-            a.Spec.Name.localeCompare(b.Spec.Name)
-        );
-
-        // Create select menu with up to 25 services (Discord limit)
-        const options = sortedServices.slice(0, 25).map((service: Service) => ({
-            label: service.Spec.Name,
-            value: service.Spec.Name,
-            description:
-                service.Spec.TaskTemplate.ContainerSpec.Image.substring(0, 100),
-        }));
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId("service_select_single")
-            .setPlaceholder("Select a service to deploy")
-            .setMinValues(1)
-            .setMaxValues(1) // Only allow selecting one service
-            .addOptions(options);
-
-        const row =
-            new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-                selectMenu
-            );
 
         const embed = new EmbedBuilder()
             .setColor(0x0099ff)
-            .setTitle("📋 Service Deployment")
-            .setDescription(
-                "Select a service to deploy. If the service is not showing, please contact admin to add it to the whitelist."
-            )
+            .setTitle("📋 Available Endpoints and Stacks")
+            .setDescription("Endpoints and their associated stacks available for deployment")
             .setFooter({ text: "Powered by MENI" })
             .setTimestamp();
 
-        const message = await interaction.editReply({
-            embeds: [embed],
-            components: [row],
-        });
+        // Group endpoints with their stacks
+        endpoints.forEach((endpoint) => {
+            const stacks = endpoint.stacks;
+            let stacksText = "";
 
-        // Wait for selection
-        const collector = message.createMessageComponentCollector({
-            componentType: ComponentType.StringSelect,
-            time: 60000, // 1 minute
-        });
-
-        collector.on("collect", async (i) => {
-            if (i.user.id !== interaction.user.id) {
-                await i.reply({
-                    content: "This menu is not for you!",
-                    ephemeral: true,
-                });
-                return;
-            }
-
-            const serviceName = i.values[0];
-
-            // Check if user has GitLab token
-            const { hasGitLabToken } = await import("./gitlab");
-            const hasToken = await hasGitLabToken(i.user.id);
-
-            if (!hasToken) {
-                const noTokenEmbed = new EmbedBuilder()
-                    .setColor(0xff0000)
-                    .setTitle("🔐 GitLab Token Required")
-                    .setDescription(
-                        "You need to configure your GitLab personal access token to deploy services."
-                    )
-                    .addFields(
-                        {
-                            name: "How to Set Token",
-                            value: "Use `/gitlab token` to set your token",
-                            inline: false,
-                        },
-                        {
-                            name: "Why?",
-                            value: "We need to fetch available tags from GitLab for deployment.",
-                            inline: false,
-                        }
-                    )
-                    .setFooter({ text: "Powered by MENI" })
-                    .setTimestamp();
-
-                await i.update({ embeds: [noTokenEmbed], components: [] });
-                return;
-            }
-
-            // Show loading while fetching tags
-            const loadingEmbed = new EmbedBuilder()
-                .setColor(0xffa500)
-                .setTitle("🔍 Fetching Available Tags")
-                .setDescription(
-                    `Fetching tags for **${serviceName}** from GitLab...`
-                )
-                .setFooter({ text: "Powered by MENI" })
-                .setTimestamp();
-
-            await i.update({ embeds: [loadingEmbed], components: [] });
-
-            try {
-                // Get GitLab project ID for the service
-                const projectId = getGitLabProjectId(serviceName);
-                if (!projectId) {
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor(0xff0000)
-                        .setTitle("❌ Service Not Configured")
-                        .setDescription(
-                            `Service "${serviceName}" doesn't have a GitLab project ID mapping.`
-                        )
-                        .setFooter({
-                            text: "Contact admin to add GitLab project ID mapping",
-                        })
-                        .setTimestamp();
-
-                    await i.editReply({ embeds: [errorEmbed], components: [] });
-                    return;
-                }
-
-                // Get user's GitLab token and fetch tags
-                const { getGitLabToken } = await import("./gitlab");
-                const userToken = await getGitLabToken(i.user.id);
-
-                if (!userToken) {
-                    const noTokenEmbed = new EmbedBuilder()
-                        .setColor(0xff0000)
-                        .setTitle("🔐 GitLab Token Not Found")
-                        .setDescription(
-                            "Your GitLab token could not be retrieved. Please set it again using `/gitlab token`."
-                        )
-                        .setFooter({ text: "Powered by MENI" })
-                        .setTimestamp();
-
-                    await i.editReply({
-                        embeds: [noTokenEmbed],
-                        components: [],
-                    });
-                    return;
-                }
-
-                // Check if service has GitOps configuration
-                const serviceConfig = getServiceConfig(serviceName);
-                if (!serviceConfig) {
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor(0xff0000)
-                        .setTitle("❌ GitOps Configuration Missing")
-                        .setDescription(
-                            `Service "${serviceName}" doesn't have complete GitOps configuration. Please add gitOpsRepoId, gitOpsFilePath, and gitOpsBranch to the whitelist.`
-                        )
-                        .setFooter({
-                            text: "Contact admin to add GitOps configuration",
-                        })
-                        .setTimestamp();
-
-                    await i.editReply({ embeds: [errorEmbed], components: [] });
-                    return;
-                }
-
-                // Fetch tags from GitLab
-                const { GitLabClient } = await import("../utils/gitlabClient");
-                const gitlabUrl = process.env.GITLAB_URL;
-
-                if (!gitlabUrl) {
-                    throw new Error("GitLab URL is not configured");
-                }
-
-                const gitlabClient = new GitLabClient({
-                    baseUrl: gitlabUrl,
-                    token: userToken,
-                });
-                const tags = await gitlabClient.getProjectTags(projectId, 10); // Get last 10 tags
-
-                if (tags.length === 0) {
-                    const noTagsEmbed = new EmbedBuilder()
-                        .setColor(0xffa500)
-                        .setTitle("📋 No Tags Found")
-                        .setDescription(
-                            `No tags found for service "${serviceName}". Cannot proceed with deployment.`
-                        )
-                        .setFooter({
-                            text: "Create a tag first using /deploy create-tag",
-                        })
-                        .setTimestamp();
-
-                    await i.editReply({
-                        embeds: [noTagsEmbed],
-                        components: [],
-                    });
-                    return;
-                }
-
-                // Create select menu for tags
-                const tagOptions = tags.map((tag) => ({
-                    label: tag.name,
-                    value: tag.name,
-                    description: `${
-                        tag.commit.short_id
-                    } - ${tag.commit.title.substring(0, 80)}`,
-                }));
-
-                const tagSelectMenu = new StringSelectMenuBuilder()
-                    .setCustomId(`tag_select_${serviceName}`)
-                    .setPlaceholder("Select a tag to deploy")
-                    .setMinValues(1)
-                    .setMaxValues(1)
-                    .addOptions(tagOptions);
-
-                const tagRow =
-                    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-                        tagSelectMenu
-                    );
-
-                const tagEmbed = new EmbedBuilder()
-                    .setColor(0x0099ff)
-                    .setTitle("🏷️ Select Tag to Deploy")
-                    .setDescription(
-                        `Select a tag for **${serviceName}** deployment.\n\nShowing ${tags.length} most recent tag(s).`
-                    )
-                    .addFields(
-                        { name: "Service", value: serviceName, inline: true },
-                        {
-                            name: "Endpoint",
-                            value: `${endpointId}`,
-                            inline: true,
-                        }
-                    )
-                    .setFooter({ text: "Powered by MENI" })
-                    .setTimestamp();
-
-                await i.editReply({ embeds: [tagEmbed], components: [tagRow] });
-
-                // Wait for tag selection
-                const tagCollector = i.message!.createMessageComponentCollector(
-                    {
-                        componentType: ComponentType.StringSelect,
-                        time: 60000, // 1 minute
-                    }
-                );
-
-                tagCollector.on("collect", async (tagInteraction) => {
-                    if (tagInteraction.user.id !== interaction.user.id) {
-                        await tagInteraction.reply({
-                            content: "This menu is not for you!",
-                            ephemeral: true,
-                        });
-                        return;
-                    }
-
-                    const selectedTag = tagInteraction.values[0];
-
-                    // Show deploying embed
-                    const deployingEmbed = new EmbedBuilder()
-                        .setColor(0xffa500)
-                        .setTitle("🚀 Starting Deployment")
-                        .setDescription(
-                            `Deploying **${serviceName}** with tag **${selectedTag}**`
-                        )
-                        .addFields(
-                            {
-                                name: "Endpoint",
-                                value: `${endpointId}`,
-                                inline: true,
-                            },
-                            { name: "Tag", value: selectedTag, inline: true },
-                            {
-                                name: "Status",
-                                value: "⏳ In Progress...",
-                                inline: false,
-                            }
-                        )
-                        .setFooter({ text: "Powered by MENI" })
-                        .setTimestamp();
-
-                    await tagInteraction.update({
-                        embeds: [deployingEmbed],
-                        components: [],
-                    });
-
-                    // Deploy with GitOps workflow
-                    try {
-                        const result = await deployServiceViaGitOps(
-                            endpointId,
-                            serviceName,
-                            selectedTag,
-                            userToken,
-                            serviceConfig
-                        );
-
-                        // Determine embed color and title based on success/failure
-                        let embedColor = result.success ? 0x00ff00 : 0xff0000; // Green or Red
-                        let title = result.success
-                            ? "✅ Deployment Initiated"
-                            : "❌ Deployment Failed";
-
-                        // Create success embed with pull results and GitOps info
-                        const successEmbed = new EmbedBuilder()
-                            .setColor(embedColor)
-                            .setTitle(title)
-                            .setDescription(result.message)
-                            .addFields(
-                                {
-                                    name: "Service",
-                                    value: serviceName,
-                                    inline: true,
-                                },
-                                {
-                                    name: "Endpoint",
-                                    value: `${endpointId}`,
-                                    inline: true,
-                                },
-                                {
-                                    name: "Tag",
-                                    value: selectedTag,
-                                    inline: true,
-                                }
-                            )
-                            .setFooter({ text: "Powered by MENI" })
-                            .setTimestamp();
-
-                        // Add image information
-                        if (result.success && result.imageInfo) {
-                            successEmbed.addFields({
-                                name: "📦 Image Information",
-                                value: `• **Image**: \`${result.imageInfo.imageName}\`\n• **Tag**: \`${result.imageInfo.imageTag}\``,
-                            });
-                        }
-
-                        // Add node pull results with SHA digest
-                        if (
-                            result.pullResults &&
-                            result.pullResults.length > 0
-                        ) {
-                            const successfulPulls = result.pullResults.filter(
-                                (r: ImagePullProgress) => r.status === "success"
-                            );
-                            const failedPulls = result.pullResults.filter(
-                                (r: ImagePullProgress) => r.status === "failed"
-                            );
-
-                            let pullResultsText = "";
-
-                            // Show successful pulls with digest info
-                            if (successfulPulls.length > 0) {
-                                pullResultsText += "✅ Success:\n";
-                                successfulPulls.forEach(
-                                    (r: ImagePullProgress, idx: number) => {
-                                        pullResultsText += `--- Node ${
-                                            idx + 1
-                                        } ---\n`;
-                                        const digest = r.digest
-                                            ? `• Digest: \`${r.digest}\``
-                                            : "";
-                                        const imageIdInfo = r.imageId
-                                            ? `• Image ID: \`${r.imageId.slice(
-                                                  -12
-                                              )}\``
-                                            : "";
-                                        pullResultsText += `${digest}\n${imageIdInfo}\n`;
-                                    }
-                                );
-                            }
-
-                            // Show failed pulls
-                            if (failedPulls.length > 0) {
-                                pullResultsText += "❌ Failed:\n";
-                                failedPulls.forEach((r: ImagePullProgress) => {
-                                    pullResultsText += `• Node: ${r.node}: ${
-                                        r.error || "Unknown error"
-                                    }\n`;
-                                });
-                            }
-
-                            if (pullResultsText) {
-                                successEmbed.addFields({
-                                    name: "📦 Image Pull Results",
-                                    value:
-                                        pullResultsText.length > 1024
-                                            ? pullResultsText.substring(
-                                                  0,
-                                                  1021
-                                              ) + "..."
-                                            : pullResultsText,
-                                });
-                            }
-                        }
-
-                        // Add health check result
-                        if (result.healthCheckResult) {
-                            const healthStatus = result.healthCheckResult.healthy ? "✅" : "❌";
-                            let healthDetails = "";
-                            
-                            if (result.healthCheckResult.healthy) {
-                                healthDetails = `All ${result.healthCheckResult.runningTasks}/${result.healthCheckResult.desiredReplicas} replicas running ✨`;
-                            } else {
-                                const deploymentProgress = result.healthCheckResult.deploymentProgress || `${result.healthCheckResult.runningTasks}/${result.healthCheckResult.desiredReplicas}`;
-                                healthDetails = `${deploymentProgress} running - ${result.healthCheckResult.status}`;
-                            }
-                            
-                            // Add availability insights if available
-                            let availabilityInsights = "";
-                            if (result.healthCheckResult.availabilityHistory && result.healthCheckResult.availabilityHistory.length > 0) {
-                                const history = result.healthCheckResult.availabilityHistory;
-                                const maxRunning = Math.max(...history.map(h => h.running));
-                                const totalChecks = history.length;
-                                const healthyChecks = history.filter(h => h.status === 'healthy').length;
-                                
-                                if (maxRunning > 0 && maxRunning < result.healthCheckResult.desiredReplicas) {
-                                    availabilityInsights = `\n📈 Max reached: ${maxRunning}/${result.healthCheckResult.desiredReplicas} (${Math.round((maxRunning/result.healthCheckResult.desiredReplicas)*100)}%)`;
-                                }
-                            }
-                            
-                            const healthMessage = `${healthStatus} ${healthDetails}${availabilityInsights}`;
-                            
-                            successEmbed.addFields({
-                                name: "🔍 Advanced Health Check",
-                                value: healthMessage,
-                            });
-                            
-                            // Add detailed failure information if available
-                            if (!result.healthCheckResult.healthy && result.healthCheckResult.failedTasks.length > 0) {
-                                const failureDetails = result.healthCheckResult.failedTasks.slice(0, 3).map(task => 
-                                    `• ${task.state}: ${task.error.substring(0, 50)}${task.error.length > 50 ? '...' : ''}`
-                                ).join('\n');
-                                
-                                const failureField = failureDetails.length > 1024 
-                                    ? failureDetails.substring(0, 1021) + "..."
-                                    : failureDetails;
-                                
-                                successEmbed.addFields({
-                                    name: "⚠️ Failure Details",
-                                    value: failureField,
-                                });
-                            }
-                        }
-
-                        await tagInteraction.editReply({
-                            embeds: [successEmbed],
-                        });
-                    } catch (error: any) {
-                        console.error("Deploy error:", error);
-
-                        const errorEmbed = new EmbedBuilder()
-                            .setColor(0xff0000)
-                            .setTitle("❌ Deployment Error")
-                            .setDescription(
-                                error.message ||
-                                    "An unknown error occurred during deployment"
-                            )
-                            .setFooter({ text: "Powered by MENI" })
-                            .setTimestamp();
-
-                        await tagInteraction.editReply({
-                            embeds: [errorEmbed],
-                        });
-                    }
-                });
-
-                tagCollector.on("end", (collected) => {
-                    if (collected.size === 0) {
-                        i.editReply({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(0xff0000)
-                                    .setTitle("⏰ Timeout")
-                                    .setDescription("Tag selection timed out.")
-                                    .setFooter({ text: "Powered by MENI" })
-                                    .setTimestamp(),
-                            ],
-                            components: [],
-                        });
-                    }
-                });
-            } catch (error: any) {
-                console.error("Fetch tags error:", error);
-
-                const errorEmbed = new EmbedBuilder()
-                    .setColor(0xff0000)
-                    .setTitle("❌ Failed to Fetch Tags")
-                    .setDescription(
-                        error.message ||
-                            "An unknown error occurred while fetching tags"
-                    )
-                    .setFooter({ text: "Powered by MENI" })
-                    .setTimestamp();
-
-                await i.editReply({ embeds: [errorEmbed], components: [] });
-            }
-        });
-
-        collector.on("end", (collected) => {
-            if (collected.size === 0) {
-                interaction.editReply({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor(0xff0000)
-                            .setTitle("⏰ Timeout")
-                            .setDescription("Service selection timed out.")
-                            .setFooter({ text: "Powered by MENI" })
-                            .setTimestamp(),
-                    ],
-                    components: [],
+            if (stacks.length === 0) {
+                stacksText = "No stacks configured";
+            } else {
+                stacks.forEach((stackName) => {
+                    const stackConfig = getStackConfig(stackName);
+                    const serviceCount = stackConfig?.services.length || 0;
+                    stacksText += `• **${stackName}** (${serviceCount} service${serviceCount !== 1 ? "s" : ""})\n`;
                 });
             }
-        });
-    } catch (error: any) {
-        throw error;
-    }
-}
-
-async function handleListServices(
-    interaction: ChatInputCommandInteraction,
-    client: any
-) {
-    const endpointId = interaction.options.getInteger("endpoint", true);
-    const search = interaction.options.getString("search");
-
-    await interaction.deferReply();
-
-    // Validate endpoint is whitelisted
-    if (!isEndpointWhitelisted(endpointId)) {
-        const notAllowedEmbed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle("❌ Access Denied")
-            .setDescription(`Endpoint ID \`${endpointId}\` is not whitelisted.`)
-            .setFooter({
-                text: "Contact admin to add this endpoint to the whitelist",
-            })
-            .setTimestamp();
-
-        await interaction.editReply({ embeds: [notAllowedEmbed] });
-        return;
-    }
-
-    try {
-        const allServices = await client.getServices(endpointId);
-
-        // Filter services based on whitelist first
-        const whitelistedServices = filterWhitelistedServices(allServices);
-
-        // Then filter by search term if provided
-        const services = search
-            ? whitelistedServices.filter((service: Service) =>
-                  service.Spec.Name.toLowerCase().includes(search.toLowerCase())
-              )
-            : whitelistedServices;
-
-        if (services.length === 0) {
-            const noServicesEmbed = new EmbedBuilder()
-                .setColor(0xffa500)
-                .setTitle("📋 Services List")
-                .setDescription(
-                    search
-                        ? `No whitelisted services found containing "${search}" in this endpoint.`
-                        : "No whitelisted services found in this endpoint."
-                )
-                .setFooter({ text: "Powered by MENI" })
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [noServicesEmbed] });
-            return;
-        }
-
-        // Group services by first 10 for pagination
-        const servicesPerPage = 10;
-        const pages = Math.ceil(services.length / servicesPerPage);
-        let currentPage = 0;
-
-        const generateEmbed = (page: number) => {
-            const start = page * servicesPerPage;
-            const end = start + servicesPerPage;
-            const pageServices = services.slice(start, end);
-
-            const embed = new EmbedBuilder()
-                .setColor(0x0099ff)
-                .setTitle("📋 Available Services")
-                .setDescription(
-                    search
-                        ? `Showing ${start + 1}-${Math.min(
-                              end,
-                              services.length
-                          )} of ${
-                              services.length
-                          } services (search: "${search}")`
-                        : `Showing ${start + 1}-${Math.min(
-                              end,
-                              services.length
-                          )} of ${services.length} services`
-                )
-                .setFooter({ text: `Page ${page + 1} of ${pages}` })
-                .setFooter({ text: "Powered by MENI" })
-                .setTimestamp();
-
-            pageServices.forEach((service: Service) => {
-                const image = service.Spec.TaskTemplate.ContainerSpec.Image;
-                embed.addFields({
-                    name: service.Spec.Name,
-                    value: `Image: \`${image}\``,
-                    inline: false,
-                });
-            });
-
-            return embed;
-        };
-
-        const embed = generateEmbed(currentPage);
-        const components = [];
-
-        // Add pagination buttons if needed
-        if (pages > 1) {
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId("previous")
-                    .setLabel("◀ Previous")
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage === 0),
-                new ButtonBuilder()
-                    .setCustomId("next")
-                    .setLabel("Next ▶")
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage === pages - 1)
-            );
-            components.push(row);
-        }
-
-        const message = await interaction.editReply({
-            embeds: [embed],
-            components: components as any,
-        });
-
-        // Handle pagination
-        if (pages > 1) {
-            const collector = message.createMessageComponentCollector({
-                componentType: ComponentType.Button,
-                time: 300000, // 5 minutes
-            });
-
-            collector.on("collect", async (i) => {
-                if (i.user.id !== interaction.user.id) {
-                    await i.reply({
-                        content: "These buttons are not for you!",
-                        ephemeral: true,
-                    });
-                    return;
-                }
-
-                if (i.customId === "next") {
-                    currentPage++;
-                } else if (i.customId === "previous") {
-                    currentPage--;
-                }
-
-                const newEmbed = generateEmbed(currentPage);
-                const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("previous")
-                        .setLabel("◀ Previous")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(currentPage === 0),
-                    new ButtonBuilder()
-                        .setCustomId("next")
-                        .setLabel("Next ▶")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(currentPage === pages - 1)
-                );
-
-                await i.update({ embeds: [newEmbed], components: [row] });
-            });
-        }
-    } catch (error: any) {
-        throw error;
-    }
-}
-
-async function handleStatus(
-    interaction: ChatInputCommandInteraction,
-    client: any
-) {
-    await interaction.deferReply();
-
-    try {
-        const allEndpoints = await client.getEndpoints();
-        const whitelist = getWhitelistedEndpoints();
-
-        // Filter endpoints based on whitelist
-        const endpoints =
-            whitelist.length > 0
-                ? allEndpoints.filter((ep: any) => whitelist.includes(ep.Id))
-                : allEndpoints;
-
-        const embed = new EmbedBuilder()
-            .setColor(0x00ff00)
-            .setTitle("✅ Portainer Connection Status")
-            .setDescription("Connected to Portainer API")
-            .setFooter({ text: "Powered by MENI" })
-            .setTimestamp();
-
-        if (endpoints && endpoints.length > 0) {
-            const endpointsList = endpoints
-                .map(
-                    (ep: any) =>
-                        `**${ep.Name}** (ID: ${ep.Id}) - ${
-                            ep.Type === 2 ? "Docker Swarm" : "Docker"
-                        }`
-                )
-                .join("\n");
-
-            const fieldTitle =
-                whitelist.length > 0
-                    ? `📡 Whitelisted Endpoints (${endpoints.length}/${allEndpoints.length})`
-                    : `📡 Available Endpoints (${endpoints.length})`;
 
             embed.addFields({
-                name: fieldTitle,
-                value:
-                    endpointsList.length > 1024
-                        ? endpointsList.substring(0, 1021) + "..."
-                        : endpointsList,
+                name: `Endpoint ${endpoint.id}`,
+                value: stacksText || "No stacks",
+                inline: false,
             });
-        } else if (whitelist.length > 0 && endpoints.length === 0) {
-            embed.addFields({
-                name: "⚠️ No Whitelisted Endpoints Found",
-                value: "None of the whitelisted endpoint IDs exist in Portainer.",
-            });
-        }
+        });
 
         await interaction.editReply({ embeds: [embed] });
     } catch (error: any) {
@@ -1064,7 +289,7 @@ async function handleStatus(
 }
 
 /**
- * Handle /deploy tags command
+ * Handle /deploy tags command - Show top 3 tags for selected service
  */
 async function handleGetTags(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
@@ -1100,8 +325,8 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
             return;
         }
 
-        // Get whitelisted services
-        const services = getWhitelistedServices();
+        // Get all services from config
+        const services = getAllServices();
 
         if (services.length === 0) {
             const noServicesEmbed = new EmbedBuilder()
@@ -1120,10 +345,8 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
 
         // Create select menu with services (up to 25 - Discord limit)
         const options = sortedServices.slice(0, 25).map((service) => {
-            const config = getWhitelistConfig();
-            const description =
-                config?.serviceMapping?.[service]?.description ||
-                "No description";
+            const serviceConfig = getServiceConfig(service);
+            const description = serviceConfig?.description || "No description";
 
             return {
                 label: service,
@@ -1148,7 +371,7 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
             .setColor(0x0099ff)
             .setTitle("📋 Get Service Tags from GitLab")
             .setDescription(
-                "Select a service to view its latest 5 tags from GitLab."
+                "Select a service to view its latest 3 tags from GitLab."
             )
             .setFooter({ text: "Powered by MENI" })
             .setTimestamp();
@@ -1233,7 +456,6 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
                 }
 
                 // Fetch tags from GitLab using user's token
-                const { GitLabClient } = await import("../utils/gitlabClient");
                 const gitlabUrl = process.env.GITLAB_URL;
 
                 if (!gitlabUrl) {
@@ -1287,10 +509,10 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
                     .setTimestamp();
 
                 // Add each tag as a field
-                tags.forEach((tag, index) => {
+                tags.forEach((tag) => {
                     const commitDate = new Date(
                         tag.commit.committed_date
-                    ).toLocaleString("en-US", {
+                    ).toLocaleString("id-ID", {
                         year: "numeric",
                         month: "short",
                         day: "numeric",
@@ -1367,7 +589,7 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
 }
 
 /**
- * Handle /deploy create-tag command
+ * Handle /deploy create-tag command - Create tag and update YAML without deploying
  */
 async function handleCreateTag(interaction: ChatInputCommandInteraction) {
     try {
@@ -1404,8 +626,8 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
             return;
         }
 
-        // Get whitelisted services
-        const services = getWhitelistedServices();
+        // Get all services from config
+        const services = getAllServices();
 
         if (services.length === 0) {
             const noServicesEmbed = new EmbedBuilder()
@@ -1427,10 +649,8 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
 
         // Create select menu with services (up to 25 - Discord limit)
         const options = sortedServices.slice(0, 25).map((service) => {
-            const config = getWhitelistConfig();
-            const description =
-                config?.serviceMapping?.[service]?.description ||
-                "No description";
+            const serviceConfig = getServiceConfig(service);
+            const description = serviceConfig?.description || "No description";
 
             return {
                 label: service,
@@ -1504,9 +724,40 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
                 return;
             }
 
+            // Find which stack contains this service to get GitOps config
+            const config = getWhitelistConfig();
+            let stackConfig: StackConfig | null = null;
+            let stackName: string | null = null;
+
+            if (config) {
+                for (const [name, stack] of Object.entries(config.stacks)) {
+                    if (stack.services.includes(serviceName)) {
+                        stackConfig = stack;
+                        stackName = name;
+                        break;
+                    }
+                }
+            }
+
+            if (!stackConfig || !stackName) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle("❌ Stack Not Found")
+                    .setDescription(
+                        `Service "${serviceName}" is not associated with any stack in the configuration.`
+                    )
+                    .setFooter({
+                        text: "Contact admin to configure stack mapping",
+                    })
+                    .setTimestamp();
+
+                await i.update({ embeds: [errorEmbed], components: [] });
+                return;
+            }
+
             // Create modal for tag details
             const modal = new ModalBuilder()
-                .setCustomId(`create_tag_modal_${serviceName}_${projectId}`)
+                .setCustomId(`create_tag_modal_${serviceName}_${projectId}_${stackName}`)
                 .setTitle(`Create Tag for ${serviceName}`);
 
             // Tag name input
@@ -1576,5 +827,370 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
         } else {
             await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
         }
+    }
+}
+
+/**
+ * Handle /deploy stack command - Pull images for all services and trigger webhook
+ */
+async function handleStackDeploy(
+    interaction: ChatInputCommandInteraction,
+    client: any
+) {
+    const endpointId = interaction.options.getInteger("endpoint", true);
+
+    await interaction.deferReply();
+
+    try {
+        // Get stacks available for this endpoint
+        const stacks = getStacksForEndpoint(endpointId);
+
+        if (stacks.length === 0) {
+            const noStacksEmbed = new EmbedBuilder()
+                .setColor(0xff0000)
+                .setTitle("❌ No Stacks Available")
+                .setDescription(
+                    `Endpoint ID \`${endpointId}\` has no stacks configured.`
+                )
+                .setFooter({
+                    text: "Contact admin to configure stacks for this endpoint",
+                })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [noStacksEmbed] });
+            return;
+        }
+
+        // Create select menu for stacks
+        const options = stacks.map((stackName) => {
+            const stackConfig = getStackConfig(stackName);
+            const serviceCount = stackConfig?.services.length || 0;
+            return {
+                label: stackName,
+                value: stackName,
+                description: `${serviceCount} service${serviceCount !== 1 ? "s" : ""}`,
+            };
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId("stack_select")
+            .setPlaceholder("Select a stack to deploy")
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(options);
+
+        const row =
+            new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+                selectMenu
+            );
+
+        const embed = new EmbedBuilder()
+            .setColor(0x0099ff)
+            .setTitle("📦 Stack Deployment")
+            .setDescription(
+                `Select a stack to deploy on endpoint \`${endpointId}\`. This will pull images for all services and trigger the webhook.`
+            )
+            .setFooter({ text: "Powered by MENI" })
+            .setTimestamp();
+
+        const message = await interaction.editReply({
+            embeds: [embed],
+            components: [row],
+        });
+
+        // Wait for stack selection
+        const collector = message.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
+            time: 60000, // 1 minute
+        });
+
+        collector.on("collect", async (i) => {
+            if (i.user.id !== interaction.user.id) {
+                await i.reply({
+                    content: "This menu is not for you!",
+                    ephemeral: true,
+                });
+                return;
+            }
+
+            const stackName = i.values[0];
+            const stackConfig = getStackConfig(stackName);
+
+            if (!stackConfig) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle("❌ Stack Not Found")
+                    .setDescription(`Stack "${stackName}" configuration not found.`)
+                    .setTimestamp();
+
+                await i.update({ embeds: [errorEmbed], components: [] });
+                return;
+            }
+
+            // Check if user has GitLab token
+            const { hasGitLabToken, getGitLabToken } = await import("./gitlab");
+            const hasToken = await hasGitLabToken(i.user.id);
+
+            if (!hasToken) {
+                const noTokenEmbed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle("🔐 GitLab Token Required")
+                    .setDescription(
+                        "You need to configure your GitLab personal access token to deploy stacks."
+                    )
+                    .addFields({
+                        name: "How to Set Token",
+                        value: "Use `/gitlab token` to set your token",
+                        inline: false,
+                    })
+                    .setFooter({ text: "Powered by MENI" })
+                    .setTimestamp();
+
+                await i.update({ embeds: [noTokenEmbed], components: [] });
+                return;
+            }
+
+            const userToken = await getGitLabToken(i.user.id);
+            if (!userToken) {
+                const noTokenEmbed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle("🔐 GitLab Token Not Found")
+                    .setDescription(
+                        "Your GitLab token could not be retrieved. Please set it again using `/gitlab token`."
+                    )
+                    .setFooter({ text: "Powered by MENI" })
+                    .setTimestamp();
+
+                await i.update({ embeds: [noTokenEmbed], components: [] });
+                return;
+            }
+
+            // Show deploying embed
+            const deployingEmbed = new EmbedBuilder()
+                .setColor(0xffa500)
+                .setTitle("🚀 Starting Stack Deployment")
+                .setDescription(
+                    `Deploying stack **${stackName}** on endpoint \`${endpointId}\``
+                )
+                .addFields({
+                    name: "Status",
+                    value: "⏳ Pulling images for all services...",
+                    inline: false,
+                })
+                .setFooter({ text: "Powered by MENI" })
+                .setTimestamp();
+
+            await i.update({ embeds: [deployingEmbed], components: [] });
+
+            try {
+                // Get GitLab client
+                const gitlabUrl = process.env.GITLAB_URL;
+                if (!gitlabUrl) {
+                    throw new Error("GitLab URL is not configured");
+                }
+
+                const gitlabClient = new GitLabClient({
+                    baseUrl: gitlabUrl,
+                    token: userToken,
+                });
+
+                // Get YAML file to read current tags
+                let yamlContent: string;
+                try {
+                    yamlContent = await gitlabClient.getFileRawContent(
+                        stackConfig.gitOpsRepoId,
+                        stackConfig.gitOpsFilePath,
+                        stackConfig.gitOpsBranch
+                    );
+                } catch (error: any) {
+                    throw new Error(
+                        `Failed to fetch GitOps configuration: ${error.message}`
+                    );
+                }
+
+                // Get all services in the stack
+                const services = stackConfig.services;
+                const pullResults: Array<{
+                    serviceName: string;
+                    success: boolean;
+                    pullResults: ImagePullProgress[];
+                    error?: string;
+                }> = [];
+
+                // Pull images for each service
+                for (const serviceName of services) {
+                    try {
+                        // Get current tag from YAML (service name in YAML is just the service name)
+                        const currentTag = extractCurrentImageTag(
+                            yamlContent,
+                            serviceName
+                        );
+
+                        if (!currentTag) {
+                            console.warn(
+                                `⚠️ Could not find current tag for service ${serviceName} in YAML, skipping pull`
+                            );
+                            pullResults.push({
+                                serviceName,
+                                success: false,
+                                pullResults: [],
+                                error: "Tag not found in YAML",
+                            });
+                            continue;
+                        }
+
+                        // Construct Portainer service name (Docker Swarm format: stack_service)
+                        const portainerServiceName = `${stackName}_${serviceName}`;
+
+                        // Pull image on all nodes
+                        const pullResult = await client.deployService(
+                            endpointId,
+                            portainerServiceName,
+                            currentTag
+                        );
+
+                        pullResults.push({
+                            serviceName,
+                            success: true,
+                            pullResults: pullResult.pullResults,
+                        });
+                    } catch (error: any) {
+                        console.error(
+                            `❌ Failed to pull image for ${serviceName}:`,
+                            error.message
+                        );
+                        pullResults.push({
+                            serviceName,
+                            success: false,
+                            pullResults: [],
+                            error: error.message,
+                        });
+                    }
+                }
+
+                // Trigger webhook
+                let webhookResult = null;
+                if (stackConfig.gitOpsWebhook) {
+                    try {
+                        webhookResult = await client.triggerStackWebhook(
+                            stackConfig.gitOpsWebhook
+                        );
+                    } catch (error: any) {
+                        console.error(
+                            `❌ Failed to trigger webhook:`,
+                            error.message
+                        );
+                        webhookResult = {
+                            success: false,
+                            message: error.message,
+                        };
+                    }
+                }
+
+                // Build results embed
+                const successCount = pullResults.filter((r) => r.success).length;
+                const failedCount = pullResults.filter((r) => !r.success).length;
+                const embedColor =
+                    failedCount === 0 && webhookResult?.success !== false
+                        ? 0x00ff00
+                        : 0xffa500;
+
+                const resultEmbed = new EmbedBuilder()
+                    .setColor(embedColor)
+                    .setTitle(
+                        failedCount === 0 && webhookResult?.success !== false
+                            ? "✅ Stack Deployment Initiated"
+                            : "⚠️ Stack Deployment Partially Completed"
+                    )
+                    .setDescription(
+                        `Deployment initiated for stack **${stackName}**`
+                    )
+                    .addFields(
+                        {
+                            name: "Stack",
+                            value: stackName,
+                            inline: true,
+                        },
+                        {
+                            name: "Endpoint",
+                            value: `${endpointId}`,
+                            inline: true,
+                        },
+                        {
+                            name: "Services",
+                            value: `${successCount}/${services.length} pulled successfully`,
+                            inline: true,
+                        }
+                    )
+                    .setFooter({ text: "Powered by MENI" })
+                    .setTimestamp();
+
+                // Add pull results
+                let pullResultsText = "";
+                pullResults.forEach((result) => {
+                    if (result.success) {
+                        const successfulPulls = result.pullResults.filter(
+                            (r) => r.status === "success"
+                        ).length;
+                        pullResultsText += `✅ **${result.serviceName}**: ${successfulPulls}/${result.pullResults.length} nodes\n`;
+                    } else {
+                        pullResultsText += `❌ **${result.serviceName}**: ${result.error || "Failed"}\n`;
+                    }
+                });
+
+                if (pullResultsText) {
+                    resultEmbed.addFields({
+                        name: "📦 Image Pull Results",
+                        value:
+                            pullResultsText.length > 1024
+                                ? pullResultsText.substring(0, 1021) + "..."
+                                : pullResultsText,
+                    });
+                }
+
+                // Add webhook result
+                if (webhookResult) {
+                    const webhookStatus = webhookResult.success ? "✅" : "❌";
+                    resultEmbed.addFields({
+                        name: "🪝 Webhook Trigger",
+                        value: `${webhookStatus} ${webhookResult.message || "Triggered"}`,
+                    });
+                }
+
+                await i.editReply({ embeds: [resultEmbed] });
+            } catch (error: any) {
+                console.error("Stack deploy error:", error);
+
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle("❌ Stack Deployment Error")
+                    .setDescription(
+                        error.message ||
+                            "An unknown error occurred during stack deployment"
+                    )
+                    .setFooter({ text: "Powered by MENI" })
+                    .setTimestamp();
+
+                await i.editReply({ embeds: [errorEmbed] });
+            }
+        });
+
+        collector.on("end", (collected) => {
+            if (collected.size === 0) {
+                interaction.editReply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor(0xff0000)
+                            .setTitle("⏰ Timeout")
+                            .setDescription("Stack selection timed out.")
+                            .setFooter({ text: "Powered by MENI" })
+                            .setTimestamp(),
+                    ],
+                    components: [],
+                });
+            }
+        });
+    } catch (error: any) {
+        throw error;
     }
 }

@@ -1,4 +1,4 @@
-import { ModalSubmitInteraction, MessageFlags, EmbedBuilder } from "discord.js";
+import { ModalSubmitInteraction, MessageFlags, EmbedBuilder, TextChannel } from "discord.js";
 import Review from "../models/Review";
 import { showMarketplaceStockPanel } from "../views/marketplace/marketplaceStockPanel";
 import { createLinkProtectionPanel } from "../views/moderation/linkProtectionPanel";
@@ -6,6 +6,7 @@ import { getReviewQueueData, updateReviewMessage } from "../utils/reviewUtils";
 import { addPoints, notifyThanksMessage } from "../utils/pointsUtils";
 import { PointsTransaction } from "../models/PointsTransaction";
 import { redisManager } from "../utils/redis";
+import { validateServiceExists, extractCurrentImageTag, updateImageTagInYaml, generateCommitMessage, validateYamlContent } from "../utils/gitopsUtils";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
@@ -812,16 +813,17 @@ async function handleGitLabTokenModal(interaction: ModalSubmitInteraction) {
 
 async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
   try {
-    // Parse custom ID to get service name and project ID
-    // Format: create_tag_modal_serviceName_projectId
+    // Parse custom ID to get service name, project ID, and stack name
+    // Format: create_tag_modal_serviceName_projectId_stackName
     const customIdParts = interaction.customId.split("_");
-    const projectId = customIdParts.pop(); // Last part is project ID
+    const stackName = customIdParts.pop(); // Last part is stack name
+    const projectId = customIdParts.pop(); // Second to last is project ID
     customIdParts.shift(); // Remove "create"
     customIdParts.shift(); // Remove "tag"
     customIdParts.shift(); // Remove "modal"
     const serviceName = customIdParts.join("_"); // Rest is service name
 
-    if (!projectId || !serviceName) {
+    if (!projectId || !serviceName || !stackName) {
       await interaction.reply({
         content: "❌ Invalid modal data.",
         flags: MessageFlags.Ephemeral,
@@ -849,8 +851,8 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
     // Update the original message to show loading state
     const loadingEmbed = new EmbedBuilder()
       .setColor(0xFFA500)
-      .setTitle("🔄 Creating Tag")
-      .setDescription(`Creating tag **${tagName}** for **${serviceName}** in GitLab...`)
+      .setTitle("🔄 Creating Tag and Updating YAML")
+      .setDescription(`Creating tag **${tagName}** for **${serviceName}** and updating GitOps configuration...`)
       .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
@@ -882,8 +884,60 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
     
     const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
 
+    // Load stack config to get GitOps info
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const whitelistPath = join(process.cwd(), "whitelist_deploy.json");
+    const whitelistData = readFileSync(whitelistPath, "utf-8");
+    const whitelist = JSON.parse(whitelistData);
+    const stackConfig = whitelist.stacks?.[stackName];
+
+    if (!stackConfig) {
+      throw new Error(`Stack "${stackName}" configuration not found`);
+    }
+
     // Create the tag (from main branch)
     const tag = await gitlabClient.createTag(projectId, tagName, "main", tagMessage);
+
+    // Update YAML file with new tag
+    let yamlUpdated = false;
+    let yamlCommitInfo = null;
+    
+    try {
+      // Get current YAML content
+      const yamlContent = await gitlabClient.getFileRawContent(
+        stackConfig.gitOpsRepoId,
+        stackConfig.gitOpsFilePath,
+        stackConfig.gitOpsBranch
+      );
+
+      if (!validateServiceExists(yamlContent, serviceName)) {
+        throw new Error(`Service "${serviceName}" not found in GitOps configuration file`);
+      }
+
+      // Extract current tag and update YAML
+      const currentTag = extractCurrentImageTag(yamlContent, serviceName);
+      let updatedYamlContent = updateImageTagInYaml(yamlContent, serviceName, tagName);
+
+      // Validate and commit changes back to GitLab
+      const commitMessage = generateCommitMessage(serviceName, tagName, currentTag || undefined);
+      
+      // Validate and clean YAML content before upload
+      updatedYamlContent = validateYamlContent(updatedYamlContent);
+      
+      await gitlabClient.updateFile(
+        stackConfig.gitOpsRepoId,
+        stackConfig.gitOpsFilePath,
+        stackConfig.gitOpsBranch,
+        updatedYamlContent,
+        commitMessage
+      );
+
+      yamlUpdated = true;
+    } catch (error: any) {
+      console.error(`⚠️ Failed to update YAML file: ${error.message}`);
+      // Continue - tag was created successfully, YAML update failed
+    }
 
     // Success embed with user info
     const successEmbed = new EmbedBuilder()
@@ -896,18 +950,59 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
         { name: "Branch", value: "main", inline: true },
         { name: "Commit", value: tag.commit.short_id, inline: true },
         { name: "Commit Author", value: tag.commit.author_name, inline: true },
-        { name: "Created At", value: new Date(tag.commit.created_at).toLocaleString("en-US"), inline: true },
+        { name: "Created At", value: new Date(tag.commit.created_at).toLocaleString("id-ID"), inline: true },
         { name: "Tag Message", value: tagMessage, inline: false },
         { name: "Created By", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "Created On", value: new Date().toLocaleString("en-US"), inline: true }
+        { name: "Created On", value: new Date().toLocaleString("id-ID"), inline: true }
       )
       .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
+    // Add YAML update info if successful
+    if (yamlUpdated && yamlCommitInfo) {
+      successEmbed.addFields({
+        name: "📝 GitOps YAML Updated",
+        value: `✅ Updated \`${stackConfig.gitOpsFilePath}\``,
+        inline: false,
+      });
+      successEmbed.setDescription(
+        `Tag **${tagName}** created and GitOps configuration updated. Monitoring pipeline status...`
+      );
+    } else if (!yamlUpdated) {
+      successEmbed.addFields({
+        name: "⚠️ YAML Update Failed",
+        value: "Tag was created but YAML file could not be updated. Please update manually.",
+        inline: false,
+      });
+    }
+
     // Edit the original message with success
     await originalMessage.edit({ embeds: [successEmbed], components: [] });
+
+    // Check and monitor pipeline status if YAML was updated
+    if (yamlUpdated) {
+      const commitSha = tag?.commit?.id;
+      
+      if (commitSha) {
+        console.log(`🔍 Starting pipeline monitoring for commit: ${commitSha.substring(0, 8)}`);
+        // Start pipeline monitoring in background
+        monitorPipelineStatus(
+          gitlabClient,
+          projectId,
+          commitSha,
+          originalMessage,
+          interaction.channel,
+          serviceName,
+          tagName
+        ).catch((error) => {
+          console.error("❌ Pipeline monitoring error:", error);
+        });
+      } else {
+        console.warn("❌ No commit SHA available for pipeline monitoring.");
+      }
+    }
   } catch (error: any) {
-    console.error("Create tag modal error:", error);
+    console.error("❌ Create tag modal error:", error);
 
     const errorEmbed = new EmbedBuilder()
       .setColor(0xFF0000)
@@ -915,7 +1010,7 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
       .setDescription(error.message || "An unknown error occurred while creating the tag")
       .addFields(
         { name: "Attempted By", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "Time", value: new Date().toLocaleString("en-US"), inline: true }
+        { name: "Time", value: new Date().toLocaleString("id-ID"), inline: true }
       )
       .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
@@ -933,4 +1028,375 @@ async function handleCreateTagModal(interaction: ModalSubmitInteraction) {
       });
     }
   }
+}
+
+/**
+ * Safely convert timestamp from embed data to Date or null
+ */
+function safeTimestamp(timestamp: any): Date | null {
+  if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp;
+  if (typeof timestamp === 'number') return new Date(timestamp);
+  if (typeof timestamp === 'string') {
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+/**
+ * Monitor pipeline status for a commit and send notification when it completes
+ */
+async function monitorPipelineStatus(
+  gitlabClient: any,
+  projectId: string,
+  commitSha: string,
+  originalMessage: any,
+  channel: any,
+  serviceName: string,
+  tagName: string
+) {
+  const maxWaitTime = 10 * 60 * 1000; // 10 minutes
+  const pollInterval = 15 * 1000; // 15 seconds
+  const initialWait = 5 * 1000; // Wait 5 seconds before first check
+  const startTime = Date.now();
+
+  // Wait a bit for pipeline to start
+  await new Promise((resolve) => setTimeout(resolve, initialWait));
+
+  let pipelineId: number | null = null;
+  let lastStatus: string | null = null;
+
+  // Update original message to show pipeline monitoring
+  const originalEmbedData = originalMessage.embeds[0]?.data || {};
+  const monitoringEmbed = new EmbedBuilder()
+    .setColor(originalEmbedData.color || 0x00FF00)
+    .setTitle(originalEmbedData.title || "✅ Tag Created Successfully")
+    .setDescription(
+      `Tag **${tagName}** created and GitOps configuration updated.\n🔍 Monitoring pipeline status...`
+    )
+    .setFooter(originalEmbedData.footer || { text: "Powered by MENI" });
+  
+  const safeTs = safeTimestamp(originalEmbedData.timestamp);
+  if (safeTs) {
+    monitoringEmbed.setTimestamp(safeTs);
+  }
+
+  // Copy existing fields except pipeline status
+  if (originalEmbedData.fields) {
+    originalEmbedData.fields.forEach((field: any) => {
+      if (field.name !== "⏳ Pipeline Status" && field.name !== "✅ Pipeline Status" && field.name !== "ℹ️ Pipeline Status") {
+        monitoringEmbed.addFields(field);
+      }
+    });
+  }
+
+  monitoringEmbed.addFields({
+    name: "⏳ Pipeline Status",
+    value: "Waiting for pipeline to start...",
+    inline: false,
+  });
+
+  try {
+    await originalMessage.edit({ embeds: [monitoringEmbed] });
+  } catch (error) {
+    console.error("❌ Failed to update message:", error);
+  }
+
+  // Poll for pipeline status
+  while (Date.now() - startTime < maxWaitTime) {
+    console.log("🔍 Polling for pipeline status...");
+    try {
+      // Get pipelines for this commit
+      const pipelines = await gitlabClient.getPipelinesForCommit(projectId, commitSha);
+
+      if (pipelines.length > 0) {
+        // Use the most recent pipeline
+        const pipeline = pipelines[0];
+        pipelineId = pipeline.id;
+        const status = pipeline.status;
+
+        // If status changed, update the message
+        if (status !== lastStatus) {
+          lastStatus = status;
+
+          const statusEmoji = getPipelineStatusEmoji(status);
+          const statusText = getPipelineStatusText(status);
+
+          const currentEmbedData = originalMessage.embeds[0]?.data || {};
+          const updatedEmbed = new EmbedBuilder()
+            .setColor(currentEmbedData.color || 0x00FF00)
+            .setTitle(currentEmbedData.title || "✅ Tag Created Successfully")
+            .setDescription(currentEmbedData.description || "")
+            .setFooter(currentEmbedData.footer || { text: "Powered by MENI" });
+          
+          const safeTs = safeTimestamp(currentEmbedData.timestamp);
+          if (safeTs) {
+            updatedEmbed.setTimestamp(safeTs);
+          }
+
+          // Copy existing fields except pipeline status
+          if (currentEmbedData.fields) {
+            currentEmbedData.fields.forEach((field: any) => {
+              if (field.name !== "⏳ Pipeline Status" && field.name !== "✅ Pipeline Status" && field.name !== "ℹ️ Pipeline Status" && field.name !== "⏰ Pipeline Status") {
+                updatedEmbed.addFields(field);
+              }
+            });
+          }
+
+          updatedEmbed.addFields({
+            name: "⏳ Pipeline Status",
+            value: `${statusEmoji} ${statusText}\nPipeline ID: \`${pipelineId}\``,
+            inline: false,
+          });
+
+          try {
+            await originalMessage.edit({ embeds: [updatedEmbed] });
+          } catch (error) {
+            console.error("❌ Failed to update message:", error);
+          }
+        }
+
+        // Check if pipeline is finished
+        if (isPipelineFinished(status)) {
+          // Send notification in channel
+          await sendPipelineNotification(
+            channel,
+            serviceName,
+            tagName,
+            pipeline,
+            projectId,
+            commitSha
+          );
+
+          // Update original message with final status
+          const currentEmbedData = originalMessage.embeds[0]?.data || {};
+          const finalEmoji = getPipelineStatusEmoji(status);
+          const finalText = getPipelineStatusText(status);
+          const finalEmbed = new EmbedBuilder()
+            .setColor(currentEmbedData.color || 0x00FF00)
+            .setTitle(currentEmbedData.title || "✅ Tag Created Successfully")
+            .setDescription(
+              `Tag **${tagName}** created and GitOps configuration updated. Pipeline ${finalText.toLowerCase()}.`
+            )
+            .setFooter(currentEmbedData.footer || { text: "Powered by MENI" });
+          
+          const safeTs = safeTimestamp(currentEmbedData.timestamp);
+          if (safeTs) {
+            finalEmbed.setTimestamp(safeTs);
+          }
+
+          // Copy existing fields except pipeline status
+          if (currentEmbedData.fields) {
+            currentEmbedData.fields.forEach((field: any) => {
+              if (field.name !== "⏳ Pipeline Status" && field.name !== "✅ Pipeline Status" && field.name !== "ℹ️ Pipeline Status" && field.name !== "⏰ Pipeline Status") {
+                finalEmbed.addFields(field);
+              }
+            });
+          }
+
+          finalEmbed.addFields({
+            name: "✅ Pipeline Status",
+            value: `${finalEmoji} ${finalText}\nPipeline ID: \`${pipelineId}\``,
+            inline: false,
+          });
+
+          try {
+            await originalMessage.edit({ embeds: [finalEmbed] });
+          } catch (error) {
+            console.error("❌ Failed to update message:", error);
+          }
+
+          return; // Pipeline finished, stop monitoring
+        }
+      } else if (Date.now() - startTime > 30 * 1000) {
+        // If no pipeline found after 30 seconds, might not have CI/CD configured
+        const currentEmbedData = originalMessage.embeds[0]?.data || {};
+        const updatedEmbed = new EmbedBuilder()
+          .setColor(currentEmbedData.color || 0x00FF00)
+          .setTitle(currentEmbedData.title || "✅ Tag Created Successfully")
+          .setDescription(
+            `Tag **${tagName}** created and GitOps configuration updated. Ready for deployment via \`/deploy stack\`.`
+          )
+          .setFooter(currentEmbedData.footer || { text: "Powered by MENI" });
+        
+        const safeTs = safeTimestamp(currentEmbedData.timestamp);
+        if (safeTs) {
+          updatedEmbed.setTimestamp(safeTs);
+        }
+
+        // Copy existing fields except pipeline status
+        if (currentEmbedData.fields) {
+          currentEmbedData.fields.forEach((field: any) => {
+            if (field.name !== "⏳ Pipeline Status" && field.name !== "✅ Pipeline Status" && field.name !== "ℹ️ Pipeline Status" && field.name !== "⏰ Pipeline Status") {
+              updatedEmbed.addFields(field);
+            }
+          });
+        }
+
+        updatedEmbed.addFields({
+          name: "ℹ️ Pipeline Status",
+          value: "No pipeline found for this commit. CI/CD may not be configured.",
+          inline: false,
+        });
+
+        try {
+          await originalMessage.edit({ embeds: [updatedEmbed] });
+        } catch (error) {
+          console.error("❌ Failed to update message:", error);
+        }
+        return;
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    } catch (error: any) {
+      console.error("❌ Error checking pipeline status:", error);
+      // Continue polling despite errors
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+  }
+
+  // Timeout reached
+  if (pipelineId && lastStatus && !isPipelineFinished(lastStatus)) {
+    const currentEmbedData = originalMessage.embeds[0]?.data || {};
+    const timeoutEmbed = new EmbedBuilder()
+      .setColor(currentEmbedData.color || 0xFFA500)
+      .setTitle(currentEmbedData.title || "✅ Tag Created Successfully")
+      .setDescription(currentEmbedData.description || "")
+      .setFooter(currentEmbedData.footer || { text: "Powered by MENI" });
+    
+    const safeTs = safeTimestamp(currentEmbedData.timestamp);
+    if (safeTs) {
+      timeoutEmbed.setTimestamp(safeTs);
+    }
+
+    // Copy existing fields except pipeline status
+    if (currentEmbedData.fields) {
+      currentEmbedData.fields.forEach((field: any) => {
+        if (field.name !== "⏳ Pipeline Status" && field.name !== "✅ Pipeline Status" && field.name !== "ℹ️ Pipeline Status" && field.name !== "⏰ Pipeline Status") {
+          timeoutEmbed.addFields(field);
+        }
+      });
+    }
+
+    timeoutEmbed.addFields({
+      name: "⏰ Pipeline Status",
+      value: `⏳ Still running (monitoring timeout)\nPipeline ID: \`${pipelineId}\`\nStatus: ${getPipelineStatusText(lastStatus)}`,
+      inline: false,
+    });
+
+    try {
+      await originalMessage.edit({ embeds: [timeoutEmbed] });
+    } catch (error) {
+      console.error("❌ Failed to update message:", error);
+    }
+  }
+}
+
+/**
+ * Send pipeline completion notification in the channel
+ */
+async function sendPipelineNotification(
+  channel: any,
+  serviceName: string,
+  tagName: string,
+  pipeline: any,
+  projectId: string,
+  commitSha: string
+) {
+  if (!channel || !(channel instanceof TextChannel)) {
+    return; // Can't send notification if channel is not available
+  }
+
+  const statusEmoji = getPipelineStatusEmoji(pipeline.status);
+  const statusText = getPipelineStatusText(pipeline.status);
+  const embedColor = pipeline.status === "success" ? 0x00ff00 : pipeline.status === "failed" ? 0xff0000 : 0xffa500;
+
+  const gitlabUrl = process.env.GITLAB_URL || "";
+  const pipelineUrl = gitlabUrl
+    ? `${gitlabUrl.replace(/\/$/, "")}/${projectId}/-/pipelines/${pipeline.id}`
+    : null;
+
+  const notificationEmbed = new EmbedBuilder()
+    .setColor(embedColor)
+    .setTitle(`${statusEmoji} Pipeline ${statusText}`)
+    .setDescription(
+      `Pipeline for **${serviceName}** tag **${tagName}** has ${statusText.toLowerCase()}.`
+    )
+    .addFields(
+      { name: "Service", value: serviceName, inline: true },
+      { name: "Tag", value: tagName, inline: true },
+      { name: "Pipeline ID", value: `\`${pipeline.id}\``, inline: true },
+      { name: "Status", value: statusText, inline: true },
+      { name: "Commit", value: `\`${commitSha.substring(0, 8)}\``, inline: true }
+    )
+    .setFooter({ text: "Powered by MENI" })
+    .setTimestamp();
+
+  if (pipelineUrl) {
+    notificationEmbed.setURL(pipelineUrl);
+    notificationEmbed.addFields({
+      name: "🔗 Pipeline Link",
+      value: `[View Pipeline](${pipelineUrl})`,
+      inline: false,
+    });
+  }
+
+  try {
+    await channel.send({ embeds: [notificationEmbed] });
+  } catch (error) {
+    console.error("❌ Failed to send pipeline notification:", error);
+  }
+}
+
+/**
+ * Get emoji for pipeline status
+ */
+function getPipelineStatusEmoji(status: string): string {
+  switch (status) {
+    case "success":
+      return "✅";
+    case "failed":
+      return "❌";
+    case "running":
+      return "🔄";
+    case "pending":
+      return "⏳";
+    case "canceled":
+      return "🚫";
+    case "skipped":
+      return "⏭️";
+    default:
+      return "❓";
+  }
+}
+
+/**
+ * Get human-readable text for pipeline status
+ */
+function getPipelineStatusText(status: string): string {
+  switch (status) {
+    case "success":
+      return "Completed Successfully";
+    case "failed":
+      return "Failed";
+    case "running":
+      return "Running";
+    case "pending":
+      return "Pending";
+    case "canceled":
+      return "Canceled";
+    case "skipped":
+      return "Skipped";
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+}
+
+/**
+ * Check if pipeline status indicates it's finished
+ */
+function isPipelineFinished(status: string): boolean {
+  return ["success", "failed", "canceled", "skipped"].includes(status);
 }

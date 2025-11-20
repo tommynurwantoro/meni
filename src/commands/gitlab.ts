@@ -173,8 +173,8 @@ async function handleCheckStatus(interaction: ChatInputCommandInteraction) {
             .setTitle('✅ Token Configured')
             .setDescription('You have a GitLab token stored securely.')
             .addFields(
-                { name: 'Configured On', value: existingToken.created_at.toLocaleString('en-US'), inline: true },
-                { name: 'Last Updated', value: existingToken.updated_at.toLocaleString('en-US'), inline: true }
+                { name: 'Configured On', value: existingToken.created_at.toLocaleString('id-ID'), inline: true },
+                { name: 'Last Updated', value: existingToken.updated_at.toLocaleString('id-ID'), inline: true }
             )
             .setFooter({ text: 'Powered by MENI' })
             .setTimestamp();

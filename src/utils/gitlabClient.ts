@@ -107,7 +107,7 @@ export class GitLabClient {
     /**
      * Get file content from a GitLab repository
      */
-    async getFile(projectId: string, filePath: string, branch: string = 'main'): Promise<string> {
+    async getFileRawContent(projectId: string, filePath: string, branch: string = 'main'): Promise<string> {
         try {
             console.log(`🔍 Fetching file ${filePath} from GitLab project ${projectId} (branch: ${branch})...`);
             
@@ -126,9 +126,30 @@ export class GitLabClient {
     }
 
     /**
+     * Get file details from a GitLab repository
+     */
+    async getFile(projectId: string, filePath: string, branch: string = 'main'): Promise<{commit_id: string; content: string; file_path: string}> {
+        try {
+            const response = await this.client.get(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, {
+                params: { ref: branch }
+            });
+
+            return {
+                commit_id: response.data.commit_id,
+                content: response.data.content,
+                file_path: response.data.file_path
+            };
+        }
+        catch (error: any) {
+            console.error(`❌ Failed to fetch file ${filePath} from project ${projectId}:`, error.response?.data?.message || error.message);
+            throw new Error(`Failed to fetch GitLab file: ${error.response?.data?.message || error.message}`);
+        }
+    }
+
+    /**
      * Update file content in a GitLab repository
      */
-    async updateFile(projectId: string, filePath: string, branch: string, content: string, commitMessage: string): Promise<{ commit_id: string; branch: string; file_path: string }> {
+    async updateFile(projectId: string, filePath: string, branch: string, content: string, commitMessage: string): Promise<{ branch: string; file_path: string }> {
         try {
             console.log(`📝 Updating file ${filePath} in GitLab project ${projectId} (branch: ${branch})...`);
             console.log(`🔍 Content length: ${content.length} characters`);
@@ -144,21 +165,6 @@ export class GitLabClient {
                 throw new Error('Commit message cannot be empty');
             }
             
-            // First check if file exists to determine if we should create or update
-            let fileExists = false;
-            try {
-                await this.getFile(projectId, filePath, branch);
-                fileExists = true;
-                console.log(`📄 File ${filePath} exists, will update`);
-            } catch (error: any) {
-                if (error.message.includes('Failed to fetch GitLab file')) {
-                    console.log(`📄 File ${filePath} does not exist, will create`);
-                    fileExists = false;
-                } else {
-                    throw error; // Re-throw other errors
-                }
-            }
-            
             // Log the full request for debugging
             const requestData = {
                 branch: branch,
@@ -167,20 +173,16 @@ export class GitLabClient {
             };
             
             console.log(`🔧 Request data keys: ${Object.keys(requestData).join(', ')}`);
-            console.log(`❝ Project ID: ${projectId}`);
-            console.log(`❝ File path: ${encodeURIComponent(filePath)}`);
             
-            let response;
-            if (fileExists) {
-                // Update existing file
-                response = await this.client.put(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, requestData);
-            } else {
-                // Create new file
-                response = await this.client.post(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, requestData);
-            }
+            const response = await this.client.put(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, requestData);
 
-            console.log(`✅ Successfully ${fileExists ? 'updated' : 'created'} file ${filePath} in project ${projectId}`);
-            return response.data;
+            console.log(`✅ Successfully updated file ${filePath} in project ${projectId}`);
+            
+            // Return normalized response
+            return {
+                branch: response.data.branch || branch,
+                file_path: response.data.file_path || filePath,
+            };
         } catch (error: any) {
             const errorDetails = error.response?.data || {};
             console.error(`❌ Failed to ${error.response?.status === 404 ? 'create' : 'update'} file ${filePath} in project ${projectId}:`, {
@@ -213,6 +215,41 @@ export class GitLabClient {
             }
             
             throw new Error(errorMessage);
+        }
+    }
+
+    /**
+     * Get pipelines for a specific commit SHA
+     */
+    async getPipelinesForCommit(projectId: string, sha: string): Promise<any[]> {
+        try {
+            console.log(`🔍 Fetching pipelines for commit ${sha.substring(0, 8)} in project ${projectId}...`);
+            
+            const response = await this.client.get(`/api/v4/projects/${projectId}/pipelines`, {
+                params: {
+                    sha: sha,
+                    per_page: 5,
+                    order_by: 'id',
+                    sort: 'desc'
+                }
+            });
+
+            return response.data;
+        } catch (error: any) {
+            console.error(`❌ Failed to fetch pipelines for commit ${sha}:`, error.response?.data?.message || error.message);
+            throw new Error(`Failed to fetch GitLab pipelines: ${error.response?.data?.message || error.message}`);
+        }
+    }
+
+    /**
+     * Get pipeline details by ID
+     */
+    async getPipeline(projectId: string, pipelineId: number): Promise<any> {
+        try {
+            const response = await this.client.get(`/api/v4/projects/${projectId}/pipelines/${pipelineId}`);
+            return response.data;
+        } catch (error: any) {
+            throw new Error(`Failed to fetch pipeline ${pipelineId}: ${error.response?.data?.message || error.message}`);
         }
     }
 }
