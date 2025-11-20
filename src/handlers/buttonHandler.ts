@@ -1,145 +1,87 @@
-import { ButtonInteraction, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, UserSelectMenuInteraction } from "discord.js";
-import { handleConfigButton } from "./configButtonHandler";
-import { handleWelcomeButton } from "./welcomeButtonHandler";
-import { handleModerationButton } from "./moderationButtonHandler";
-import { handleMarketplaceButton } from "./marketplaceButtonHandler";
-import { handleLinkProtectionButton } from "./linkProtectionButtonHandler";
-import { handlePresensiButton } from "./presensiButtonHandler";
-import { handleSholatButton } from "./sholatButtonHandler";
-import { handlePointsButton } from "./pointsButtonHandler";
-import {
-  showMainConfigPanel,
-  createResetSuccessPanel,
-  createResetErrorPanel,
-  showWelcomeConfigPanel,
-  showMarketplaceConfigPanel,
-} from "../views";
-import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
-import { handleReviewButton } from "./reviewButtonHandler";
-import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
-import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
-import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
+import { ButtonInteraction } from "discord.js";
+import { handleConfigButton, handleResetConfirm } from "./buttons/configButtonHandler";
+import { handleWelcomeButton } from "./buttons/welcomeButtonHandler";
+import { handleModerationButton } from "./buttons/moderationButtonHandler";
+import { handleMarketplaceButton } from "./buttons/marketplaceButtonHandler";
+import { handleLinkProtectionButton } from "./buttons/linkProtectionButtonHandler";
+import { handlePresensiButton } from "./buttons/presensiButtonHandler";
+import { handleSholatButton } from "./buttons/sholatButtonHandler";
+import { handlePointsButton } from "./buttons/pointsButtonHandler";
+import { handleReviewButton } from "./buttons/reviewButtonHandler";
+import { handleBackButton } from "./buttons/navigationButtonHandler";
+import { showMainConfigPanel } from "../views";
 
-export async function handleButton(interaction: ButtonInteraction) {
+/**
+ * Main button handler router
+ * Routes button interactions to domain-specific handlers
+ */
+export async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
+  console.log("Custom ID: ", customId);
 
+  // Configuration buttons
   if (customId.startsWith("config_")) {
     await handleConfigButton(interaction);
-  } else if (customId.includes("_back")) {
+    return;
+  }
+
+  // Navigation buttons (back buttons)
+  if (customId.includes("_back") || customId === "main_back") {
     await handleBackButton(interaction);
-  } else if (customId.startsWith("welcome_")) {
-    await handleWelcomeButton(interaction);
-  } else if (customId.startsWith("points_")) {
-    await handlePointsButton(interaction);
-  } else if (customId.startsWith("moderation_")) {
-    await handleModerationButton(interaction);
-  } else if (
-    customId.startsWith("marketplace_") ||
-    customId.startsWith("stock_")
-  ) {
-    await handleMarketplaceButton(interaction);
-  } else if (customId.startsWith("link_protection_")) {
-    await handleLinkProtectionButton(interaction);
-  } else if (customId.startsWith("review_")) {
-    await handleReviewButton(interaction);
-  } else if (customId.startsWith("presensi_")) {
-    await handlePresensiButton(interaction);
-  } else if (customId.startsWith("sholat_")) {
-    await handleSholatButton(interaction);
-  } else if (customId.startsWith("points_")) {
-    await handlePointsButton(interaction);
-  } else if (customId === "reset_confirm") {
+    return;
+  }
+
+  // Reset confirmation
+  if (customId === "reset_confirm") {
     await handleResetConfirm(interaction);
-  } else if (customId === "reset_back_to_panel") {
+    return;
+  }
+
+  // Reset back to panel (alias for main_back)
+  if (customId === "reset_back_to_panel") {
     await showMainConfigPanel(interaction);
-  }
-}
-
-async function handleBackButton(interaction: ButtonInteraction) {
-  const customId = interaction.customId;
-
-  if (customId === "moderation_back") {
-    await showModerationConfigPanel(interaction);
+    return;
   }
 
-  if (customId === "welcome_back") {
-    await showWelcomeConfigPanel(interaction);
+  // Domain-specific button handlers
+  if (customId.startsWith("welcome_")) {
+    await handleWelcomeButton(interaction);
+    return;
   }
 
-  if (customId === "points_back") {
-    await showPointsConfigPanel(interaction);
+  if (customId.startsWith("points_")) {
+    console.log("Handling points button");
+    await handlePointsButton(interaction);
+    return;
   }
 
-  if (customId === "marketplace_back") {
-    await showMarketplaceConfigPanel(interaction);
+  if (customId.startsWith("moderation_")) {
+    await handleModerationButton(interaction);
+    return;
   }
 
-  if (customId === "presensi_back") {
-    await showPresensiConfigPanel(interaction);
+  if (customId.startsWith("marketplace_") || customId.startsWith("stock_")) {
+    await handleMarketplaceButton(interaction);
+    return;
   }
 
-  if (customId === "sholat_back") {
-    await showSholatConfigPanel(interaction);
+  if (customId.startsWith("link_protection_")) {
+    await handleLinkProtectionButton(interaction);
+    return;
   }
 
-  if (customId === "main_back") {
-    // Return to main configuration panel
-    await showMainConfigPanel(interaction);
+  if (customId.startsWith("review_")) {
+    await handleReviewButton(interaction);
+    return;
   }
-}
 
-async function handleResetConfirm(interaction: ButtonInteraction) {
-  const { ConfigManager } = await import("../utils/config");
+  if (customId.startsWith("presensi_")) {
+    await handlePresensiButton(interaction);
+    return;
+  }
 
-  const guildId = interaction.guildId;
-  if (!guildId) return;
-
-  try {
-    // Reset the configuration for this guild
-    ConfigManager.updateGuildConfig(guildId, {
-      welcome: {
-        channel: "",
-        message: "",
-      },
-      points: {
-        logsChannel: "",
-        thanksChannel: "",
-        enabled: false,
-        marketplace: {
-          enabled: false,
-          channel: "",
-          stock: [],
-        },
-      },
-      moderation: {
-        linkProtection: false,
-        whitelistDomains: [],
-        logsChannel: "",
-      },
-      presensi: {
-        channel: "",
-        role: "",
-        enabled: false,
-      },
-      sholat: {
-        channel: "",
-        role: "",
-        enabled: false,
-      },
-    });
-
-    const panel = createResetSuccessPanel(interaction.user.id);
-    await interaction.update({
-      embeds: [panel.embed],
-      components: [panel.components[0] as any],
-    });
-  } catch (error) {
-    console.error("Error resetting configuration:", error);
-
-    const panel = createResetErrorPanel();
-    await interaction.update({
-      embeds: [panel.embed],
-      components: [panel.components[0] as any],
-    });
+  if (customId.startsWith("sholat_")) {
+    await handleSholatButton(interaction);
+    return;
   }
 }

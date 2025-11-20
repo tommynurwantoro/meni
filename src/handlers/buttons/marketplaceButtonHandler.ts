@@ -1,11 +1,11 @@
 import { ButtonInteraction, MessageFlags } from 'discord.js';
-import { createMarketplaceConfigPanel, showMarketplaceConfigPanel } from '../views/marketplace/marketplaceConfigPanel';
-import { showMarketplaceStockPanel } from '../views/marketplace/marketplaceStockPanel';
-import { createStockAddModal, createStockRemoveModal, createStockUpdateModal } from '../views/marketplace/marketplaceStockModal';
-import { ConfigManager } from '../utils/config';
-import { showMarketplaceChannelPanel } from '../views/marketplace/marketplaceChannelPanel';
-import { sendMarketplaceUserPanel } from '../utils/marketplaceUtils';
-import { createMarketplaceUserPanel } from '../views/marketplace/marketplaceUserPanel';
+import { createMarketplaceConfigPanel, showMarketplaceConfigPanel } from '../../views/marketplace/marketplaceConfigPanel';
+import { showMarketplaceStockPanel } from '../../views/marketplace/marketplaceStockPanel';
+import { createStockAddModal, createStockRemoveModal, createStockUpdateModal } from '../../views/marketplace/marketplaceStockModal';
+import { ConfigManager } from '../../utils/config';
+import { showMarketplaceChannelPanel } from '../../views/marketplace/marketplaceChannelPanel';
+import { sendMarketplaceUserPanel } from '../../utils/marketplaceUtils';
+import { createMarketplaceUserPanel } from '../../views/marketplace/marketplaceUserPanel';
 
 export async function handleMarketplaceButton(interaction: ButtonInteraction) {
     const customId = interaction.customId;

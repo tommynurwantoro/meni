@@ -1,7 +1,7 @@
 import { ButtonInteraction, MessageFlags } from 'discord.js';
-import { createLinkProtectionPanel } from '../views/moderation/linkProtectionPanel';
-import { ConfigManager } from '../utils/config';
-import { createLinkProtectionModal } from '../views/moderation/linkProtectionModal';
+import { createLinkProtectionPanel } from '../../views/moderation/linkProtectionPanel';
+import { ConfigManager } from '../../utils/config';
+import { createLinkProtectionModal } from '../../views/moderation/linkProtectionModal';
 
 export async function handleLinkProtectionButton(interaction: ButtonInteraction) {
     const customId = interaction.customId;

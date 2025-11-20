@@ -1,8 +1,8 @@
 import { ButtonInteraction, MessageFlags } from 'discord.js';
-import { createModerationConfigPanel } from '../views/moderation/moderationConfigPanel';
-import { showModerationChannelPanel } from '../views/moderation/moderationChannelPanel';
-import { ConfigManager } from '../utils/config';
-import { showLinkProtectionPanel } from '../views/moderation/linkProtectionPanel';
+import { createModerationConfigPanel } from '../../views/moderation/moderationConfigPanel';
+import { showModerationChannelPanel } from '../../views/moderation/moderationChannelPanel';
+import { ConfigManager } from '../../utils/config';
+import { showLinkProtectionPanel } from '../../views/moderation/linkProtectionPanel';
 
 export async function handleModerationButton(interaction: ButtonInteraction) {
     const customId = interaction.customId;

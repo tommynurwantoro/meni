@@ -1,9 +1,9 @@
 import { ButtonInteraction, MessageFlags } from "discord.js";
-import { ConfigManager } from "../utils/config";
-import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
-import { sendSholatReminder } from "../utils/sholatUtils";
-import { showSholatChannelPanel } from "../views/sholat/sholatChannelPanel";
-import { showSholatRolePanel } from "../views/sholat/sholatRolePanel";
+import { ConfigManager } from "../../utils/config";
+import { showSholatConfigPanel } from "../../views/sholat/sholatConfigPanel";
+import { sendSholatReminder } from "../../utils/sholatUtils";
+import { showSholatChannelPanel } from "../../views/sholat/sholatChannelPanel";
+import { showSholatRolePanel } from "../../views/sholat/sholatRolePanel";
 
 export async function handleSholatButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;

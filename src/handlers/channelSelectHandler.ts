@@ -19,11 +19,11 @@ export async function handleChannelSelect(
     case "points_logs_channel":
       await handlePointsLogsChannel(interaction);
       break;
+    case "points_thanks_channel":
+      await handlePointsThanksChannel(interaction);
+      break;
     case "moderation_channel_select":
       await handleModerationLogsChannel(interaction);
-      break;
-    case "thanks_channel_select":
-      await handleThanksChannelSelect(interaction);
       break;
     case "marketplace_channel_select":
       await handleMarketplaceChannelSelect(interaction);
@@ -141,7 +141,7 @@ async function handlePointsLogsChannel(
   }
 }
 
-async function handleThanksChannelSelect(
+async function handlePointsThanksChannel(
   interaction: ChannelSelectMenuInteraction
 ) {
   const guildId = interaction.guildId;

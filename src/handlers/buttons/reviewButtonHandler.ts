@@ -7,7 +7,7 @@ import {
   TextInputStyle,
 } from "discord.js";
 import { Op } from "sequelize";
-import Review from "../models/Review";
+import Review from "../../models/Review";
 
 export async function handleReviewButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;

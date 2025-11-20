@@ -24,7 +24,7 @@ export async function showPointsLogsChannelPanel(interaction: ButtonInteraction)
 
   const channelRow = new ActionRowBuilder().addComponents(
     new ChannelSelectMenuBuilder()
-      .setCustomId(`points_logs_channel_select`)
+      .setCustomId(`points_logs_channel`)
       .setPlaceholder("Select channel for points logs")
       .setChannelTypes(ChannelType.GuildText)
       .setMinValues(1)

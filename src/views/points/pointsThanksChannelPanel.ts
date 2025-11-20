@@ -24,7 +24,7 @@ export async function showPointsThanksChannelPanel(interaction: ButtonInteractio
 
   const channelRow = new ActionRowBuilder().addComponents(
     new ChannelSelectMenuBuilder()
-      .setCustomId(`thanks_channel_select`)
+      .setCustomId(`points_thanks_channel`)
       .setPlaceholder("Select channel for thanks and points")
       .setChannelTypes(ChannelType.GuildText)
       .setMinValues(1)

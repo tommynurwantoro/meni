@@ -7,14 +7,14 @@ import {
   ButtonStyle,
   UserSelectMenuBuilder,
 } from "discord.js";
-import { ConfigManager } from "../utils/config";
-import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
-import { showPointsLogsChannelPanel } from "../views/points/pointsLogsChannelPanel";
-import { showPointsThanksChannelPanel } from "../views/points/pointsThanksChannelPanel";
+import { ConfigManager } from "../../utils/config";
+import { showPointsConfigPanel } from "../../views/points/pointsConfigPanel";
+import { showPointsLogsChannelPanel } from "../../views/points/pointsLogsChannelPanel";
+import { showPointsThanksChannelPanel } from "../../views/points/pointsThanksChannelPanel";
 import {
   getUserBalance,
-} from "../utils/pointsUtils";
-import { redisManager } from "../utils/redis";
+} from "../../utils/pointsUtils";
+import { redisManager } from "../../utils/redis";
 
 export async function handlePointsButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;

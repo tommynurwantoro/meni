@@ -1,8 +1,8 @@
 import { ButtonInteraction, MessageFlags } from 'discord.js';
-import { showWelcomeChannelPanel } from '../views/welcome/welcomeChannelPanel';
-import { ConfigManager } from '../utils/config';
-import { createWelcomeConfigPanel } from '../views/welcome/welcomeConfigPanel';
-import { showWelcomeMessageUpdateModal } from '../views/welcome/welcomeMessageUpdateModal';
+import { showWelcomeChannelPanel } from '../../views/welcome/welcomeChannelPanel';
+import { ConfigManager } from '../../utils/config';
+import { createWelcomeConfigPanel } from '../../views/welcome/welcomeConfigPanel';
+import { showWelcomeMessageUpdateModal } from '../../views/welcome/welcomeMessageUpdateModal';
 
 export async function handleWelcomeButton(interaction: ButtonInteraction) {
     const customId = interaction.customId;
@@ -79,7 +79,7 @@ async function handleWelcomeMessageUpdate(interaction: ButtonInteraction) {
 }
 
 async function handleWelcomeTest(interaction: ButtonInteraction) {
-    const { ConfigManager } = await import('../utils/config');
+    const { ConfigManager } = await import('../../utils/config');
 
     const guildId = interaction.guildId;
     if (!guildId) return;

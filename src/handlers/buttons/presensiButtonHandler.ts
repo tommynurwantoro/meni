@@ -1,9 +1,9 @@
 import { ButtonInteraction, MessageFlags } from "discord.js";
-import { ConfigManager } from "../utils/config";
-import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
-import { sendPresensiReminder } from "../utils/presensiUtils";
-import { showPresensiChannelPanel } from "../views/presensi/presensiChannelPanel";
-import { showPresensiRolePanel } from "../views/presensi/presensiRolePanel";
+import { ConfigManager } from "../../utils/config";
+import { showPresensiConfigPanel } from "../../views/presensi/presensiConfigPanel";
+import { sendPresensiReminder } from "../../utils/presensiUtils";
+import { showPresensiChannelPanel } from "../../views/presensi/presensiChannelPanel";
+import { showPresensiRolePanel } from "../../views/presensi/presensiRolePanel";
 
 export async function handlePresensiButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;

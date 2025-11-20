@@ -1,10 +1,10 @@
 import { ButtonInteraction, MessageFlags } from "discord.js";
-import { showWelcomeConfigPanel, createResetConfirmPanel } from "../views";
-import { showPointsConfigPanel } from "../views/points/pointsConfigPanel";
-import { showModerationConfigPanel } from "../views/moderation/moderationConfigPanel";
-import { showMarketplaceConfigPanel } from "../views/marketplace/marketplaceConfigPanel";
-import { showPresensiConfigPanel } from "../views/presensi/presensiConfigPanel";
-import { showSholatConfigPanel } from "../views/sholat/sholatConfigPanel";
+import { showWelcomeConfigPanel, createResetConfirmPanel, createResetSuccessPanel, createResetErrorPanel } from "../../views";
+import { showPointsConfigPanel } from "../../views/points/pointsConfigPanel";
+import { showModerationConfigPanel } from "../../views/moderation/moderationConfigPanel";
+import { showMarketplaceConfigPanel } from "../../views/marketplace/marketplaceConfigPanel";
+import { showPresensiConfigPanel } from "../../views/presensi/presensiConfigPanel";
+import { showSholatConfigPanel } from "../../views/sholat/sholatConfigPanel";
 
 export async function handleConfigButton(interaction: ButtonInteraction) {
   const customId = interaction.customId;
@@ -73,4 +73,63 @@ async function handleResetConfig(interaction: ButtonInteraction) {
     embeds: [panel.embed],
     components: [panel.components[0] as any],
   });
+}
+
+/**
+ * Handle reset confirmation button
+ */
+export async function handleResetConfirm(interaction: ButtonInteraction): Promise<void> {
+  const { ConfigManager } = await import("../../utils/config");
+
+  const guildId = interaction.guildId;
+  if (!guildId) return;
+
+  try {
+    // Reset the configuration for this guild
+    ConfigManager.updateGuildConfig(guildId, {
+      welcome: {
+        channel: "",
+        message: "",
+      },
+      points: {
+        logsChannel: "",
+        thanksChannel: "",
+        enabled: false,
+        marketplace: {
+          enabled: false,
+          channel: "",
+          stock: [],
+        },
+      },
+      moderation: {
+        linkProtection: false,
+        whitelistDomains: [],
+        logsChannel: "",
+      },
+      presensi: {
+        channel: "",
+        role: "",
+        enabled: false,
+      },
+      sholat: {
+        channel: "",
+        role: "",
+        enabled: false,
+      },
+    });
+
+    const panel = createResetSuccessPanel(interaction.user.id);
+    await interaction.update({
+      embeds: [panel.embed],
+      components: [panel.components[0] as any],
+    });
+  } catch (error) {
+    console.error("Error resetting configuration:", error);
+
+    const panel = createResetErrorPanel();
+    await interaction.update({
+      embeds: [panel.embed],
+      components: [panel.components[0] as any],
+    });
+  }
 }
