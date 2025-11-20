@@ -110,8 +110,23 @@ export class GitLabClient {
     async getFileRawContent(projectId: string, filePath: string, branch: string = 'main'): Promise<string> {
         try {
             console.log(`🔍 Fetching file ${filePath} from GitLab project ${projectId} (branch: ${branch})...`);
+
+            const gitlabToken = process.env.GITLAB_MENI_TOKEN;
+            if (!gitlabToken) {
+                throw new Error('GITLAB_MENI_TOKEN environment variable is not set');
+            }
+
+            // Create a separate axios instance with env token for file updates
+            const updateClient = axios.create({
+                baseURL: this.baseUrl,
+                headers: {
+                    'PRIVATE-TOKEN': gitlabToken,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 30000,
+            });
             
-            const response = await this.client.get(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}/raw`, {
+            const response = await updateClient.get(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}/raw`, {
                 params: {
                     ref: branch
                 }
@@ -130,7 +145,22 @@ export class GitLabClient {
      */
     async getFile(projectId: string, filePath: string, branch: string = 'main'): Promise<{commit_id: string; content: string; file_path: string}> {
         try {
-            const response = await this.client.get(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, {
+            const gitlabToken = process.env.GITLAB_MENI_TOKEN;
+            if (!gitlabToken) {
+                throw new Error('GITLAB_MENI_TOKEN environment variable is not set');
+            }
+
+            // Create a separate axios instance with env token for file updates
+            const updateClient = axios.create({
+                baseURL: this.baseUrl,
+                headers: {
+                    'PRIVATE-TOKEN': gitlabToken,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 30000,
+            });
+            
+            const response = await updateClient.get(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, {
                 params: { ref: branch }
             });
 
@@ -165,6 +195,12 @@ export class GitLabClient {
                 throw new Error('Commit message cannot be empty');
             }
             
+            // Use GitLab token from environment variable for file updates
+            const gitlabToken = process.env.GITLAB_MENI_TOKEN;
+            if (!gitlabToken) {
+                throw new Error('GITLAB_MENI_TOKEN environment variable is not set');
+            }
+
             // Log the full request for debugging
             const requestData = {
                 branch: branch,
@@ -174,7 +210,17 @@ export class GitLabClient {
             
             console.log(`🔧 Request data keys: ${Object.keys(requestData).join(', ')}`);
             
-            const response = await this.client.put(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, requestData);
+            // Create a separate axios instance with env token for file updates
+            const updateClient = axios.create({
+                baseURL: this.baseUrl,
+                headers: {
+                    'PRIVATE-TOKEN': gitlabToken,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 30000,
+            });
+            
+            const response = await updateClient.put(`/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filePath)}`, requestData);
 
             console.log(`✅ Successfully updated file ${filePath} in project ${projectId}`);
             

@@ -28,6 +28,7 @@ services:
       
       # GitLab Configuration
       - GITLAB_URL=${GITLAB_URL}
+      - GITLAB_MENI_TOKEN=${GITLAB_MENI_TOKEN}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       
       # Deploy Role Configuration
