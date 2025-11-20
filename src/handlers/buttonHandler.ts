@@ -17,7 +17,6 @@ import { showMainConfigPanel } from "../views";
  */
 export async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
-  console.log("Custom ID: ", customId);
 
   // Configuration buttons
   if (customId.startsWith("config_")) {
@@ -50,7 +49,6 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
   }
 
   if (customId.startsWith("points_")) {
-    console.log("Handling points button");
     await handlePointsButton(interaction);
     return;
   }

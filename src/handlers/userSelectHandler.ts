@@ -15,7 +15,6 @@ export async function handleUserSelect(interaction: UserSelectMenuInteraction) {
 async function handleThanksUserSelect(
     interaction: UserSelectMenuInteraction
   ) {
-    console.log("Handling thanks user select");
     const guildId = interaction.guildId;
     if (!guildId) return;
   

@@ -6,13 +6,10 @@ import {
   TextInputBuilder, 
   TextInputStyle,
   EmbedBuilder,
-  ButtonBuilder,
-  ButtonStyle
 } from "discord.js";
 import { redisManager } from "../utils/redis";
 import { processPurchase } from "../utils/marketplaceUtils";
 import { createMarketplaceUserPanel } from "../views/marketplace/marketplaceUserPanel";
-import { getUserBalance } from "../utils/pointsUtils";
 
 export async function handleStringSelect(interaction: StringSelectMenuInteraction) {
   const customId = interaction.customId;
@@ -35,8 +32,6 @@ async function handleThanksCategorySelect(interaction: StringSelectMenuInteracti
     });
     return;
   }
-
-  console.log("handleThanksCategorySelect", interaction.user.id, selectedCategory);
 
   // Get stored user data from Redis
   const thanksData = await redisManager.getThanksData(interaction.user.id, guildId);

@@ -17,7 +17,7 @@ export function createPresensiChannelPanel() {
     const channelRow = new ActionRowBuilder()
         .addComponents(
             new ChannelSelectMenuBuilder()
-                .setCustomId(`presensi_channel_select`)
+                .setCustomId(`presensi_channel`)
                 .setPlaceholder('Select channel for presensi messages')
                 .setChannelTypes(ChannelType.GuildText)
                 .setMinValues(1)

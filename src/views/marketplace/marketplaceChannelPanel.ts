@@ -24,7 +24,7 @@ export async function showMarketplaceChannelPanel(interaction: ButtonInteraction
 
   const channelRow = new ActionRowBuilder().addComponents(
     new ChannelSelectMenuBuilder()
-      .setCustomId(`marketplace_channel_select`)
+      .setCustomId(`marketplace_channel`)
       .setPlaceholder("Select channel for marketplace")
       .setChannelTypes(ChannelType.GuildText)
       .setMinValues(1)

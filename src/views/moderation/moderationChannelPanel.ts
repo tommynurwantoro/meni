@@ -22,7 +22,7 @@ export function createModerationChannelPanel() {
     const channelRow = new ActionRowBuilder()
         .addComponents(
             new ChannelSelectMenuBuilder()
-                .setCustomId('moderation_channel_select')
+                .setCustomId('moderation_channel')
                 .setPlaceholder('Select channel for moderation logs')
                 .setChannelTypes(ChannelType.GuildText)
                 .setMinValues(1)

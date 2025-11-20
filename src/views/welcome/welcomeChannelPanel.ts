@@ -17,7 +17,7 @@ export function createWelcomeChannelPanel() {
     const channelRow = new ActionRowBuilder()
         .addComponents(
             new ChannelSelectMenuBuilder()
-                .setCustomId(`welcome_channel_select`)
+                .setCustomId(`welcome_channel`)
                 .setPlaceholder('Select channel for welcome messages')
                 .setChannelTypes(ChannelType.GuildText)
                 .setMinValues(1)

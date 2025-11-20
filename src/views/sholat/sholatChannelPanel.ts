@@ -24,7 +24,7 @@ export async function showSholatChannelPanel(interaction: ButtonInteraction) {
 
   const channelRow = new ActionRowBuilder().addComponents(
     new ChannelSelectMenuBuilder()
-      .setCustomId(`sholat_channel_select`)
+      .setCustomId(`sholat_channel`)
       .setPlaceholder("Select channel for sholat messages")
       .setChannelTypes(ChannelType.GuildText)
       .setMinValues(1)
