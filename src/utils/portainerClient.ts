@@ -635,7 +635,7 @@ class PortainerClient {
                 `/api/stacks/webhooks/${webhookId}`,
                 null,
                 {
-                    timeout: 30000, // 30 seconds timeout
+                    timeout: 120000, // 120 seconds timeout
                 }
             );
 
