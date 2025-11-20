@@ -1,9 +1,0 @@
-{
-  "endpoints": [
-    1,
-    2,
-    3
-  ],
-  "description": "List of endpoint IDs that are allowed to be used for deployment. Copy this file to 'whitelist_endpoint.json' and add your actual endpoint IDs."
-}
-

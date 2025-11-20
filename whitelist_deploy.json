@@ -1,0 +1,67 @@
+{
+  "endpoints": [
+    {
+      "id": 51,
+      "stacks": [
+        "acc-prod"
+      ]
+    },
+    {
+      "id": 48,
+      "stacks": [
+        "tools"
+      ]
+    }
+  ],
+  "stacks": {
+    "acc-prod": {
+      "services": [
+        "bellion",
+        "beru",
+        "igris",
+        "kaisel",
+        "kandiaru"
+      ],
+      "gitOpsRepoId": "562",
+      "gitOpsFilePath": "portainer/acc-prod/docker-compose.yml",
+      "gitOpsBranch": "main",
+      "gitOpsWebhook": "90e281f6-a23a-49a1-bc66-9846963b67b1"
+    },
+    "tools": {
+      "services": [
+        "rain"
+      ],
+      "gitOpsRepoId": "557",
+      "gitOpsFilePath": "portainer/tools/docker-compose.yml",
+      "gitOpsBranch": "main",
+      "gitOpsWebhook": "24c6f06f-e9d8-4389-a43d-325dba8f65bf"
+    }
+  },
+  "services": {
+    "bellion": {
+      "gitlabProjectId": "504",
+      "description": "Frontend service for Accounting Plus"
+    },
+    "beru": {
+      "gitlabProjectId": "502",
+      "description": "Backend core service for Accounting Plus"
+    },
+    "igris": {
+      "gitlabProjectId": "501",
+      "description": "Web frontend - Prod (same repo as dev)"
+    },
+    "kaisel": {
+      "gitlabProjectId": "506",
+      "description": "Backend core service for Accounting Plus"
+    },
+    "kandiaru": {
+      "gitlabProjectId": "539",
+      "description": "Backend core service for Accounting Plus"
+    },
+    "rain": {
+      "gitlabProjectId": "518",
+      "description": "Tools service for Accounting Plus"
+    }
+  },
+  "description": "List of services that are allowed to be deployed via Discord bot. Add service names here to make them available in the deployment menu."
+}
