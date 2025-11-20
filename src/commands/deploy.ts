@@ -13,112 +13,20 @@ import {
     getPortainerClient,
     ImagePullProgress,
 } from "../utils/portainerClient";
-import { readFileSync } from "fs";
-import { join } from "path";
 import { GitLabClient } from "../utils/gitlabClient";
 import {
     extractCurrentImageTag,
 } from "../utils/gitopsUtils";
-
-// New whitelist structure interfaces matching whitelist_deploy.json
-interface EndpointConfig {
-    id: number;
-    stacks: string[];
-}
-
-interface StackConfig {
-    services: string[];
-    gitOpsRepoId: string;
-    gitOpsFilePath: string;
-    gitOpsBranch: string;
-    gitOpsWebhook: string;
-}
-
-interface ServiceConfig {
-    gitlabProjectId: string;
-    description: string;
-}
-
-interface WhitelistDeployConfig {
-    endpoints: EndpointConfig[];
-    stacks: Record<string, StackConfig>;
-    services: Record<string, ServiceConfig>;
-    description?: string;
-}
-
-// Load whitelist configuration from whitelist_deploy.json
-function getWhitelistConfig(): WhitelistDeployConfig | null {
-    try {
-        const whitelistPath = join(process.cwd(), "whitelist_deploy.json");
-        const whitelistData = readFileSync(whitelistPath, "utf-8");
-        const whitelist = JSON.parse(whitelistData);
-        return whitelist;
-    } catch (error) {
-        console.warn(
-            "⚠️ Could not load whitelist_deploy.json, deployment features disabled"
-        );
-        return null;
-    }
-}
-
-// Get all whitelisted endpoints
-function getWhitelistedEndpoints(): EndpointConfig[] {
-    const config = getWhitelistConfig();
-    if (!config || !config.endpoints) {
-        return [];
-    }
-    return config.endpoints;
-}
-
-// Get stack config for a stack name
-function getStackConfig(stackName: string): StackConfig | null {
-    const config = getWhitelistConfig();
-    if (!config || !config.stacks || !config.stacks[stackName]) {
-        return null;
-    }
-    return config.stacks[stackName];
-}
-
-// Get service config (gitlabProjectId, description)
-function getServiceConfig(serviceName: string): ServiceConfig | null {
-    const config = getWhitelistConfig();
-    if (
-        !config ||
-        !config.services ||
-        !config.services[serviceName]
-    ) {
-        return null;
-    }
-    return config.services[serviceName];
-}
-
-// Get stacks for an endpoint
-function getStacksForEndpoint(endpointId: number): string[] {
-    const endpoints = getWhitelistedEndpoints();
-    const endpoint = endpoints.find((ep) => ep.id === endpointId);
-    return endpoint?.stacks || [];
-}
-
-// Get services for a stack
-function getServicesForStack(stackName: string): string[] {
-    const stackConfig = getStackConfig(stackName);
-    return stackConfig?.services || [];
-}
-
-// Get GitLab project ID for a service
-function getGitLabProjectId(serviceName: string): string | null {
-    const serviceConfig = getServiceConfig(serviceName);
-    return serviceConfig?.gitlabProjectId || null;
-}
-
-// Get all services from all stacks
-function getAllServices(): string[] {
-    const config = getWhitelistConfig();
-    if (!config || !config.services) {
-        return [];
-    }
-    return Object.keys(config.services);
-}
+import {
+    getWhitelistConfig,
+    getWhitelistedEndpoints,
+    getStackConfig,
+    getServiceConfig,
+    getStacksForEndpoint,
+    getGitLabProjectId,
+    getAllServices,
+    findStackForService,
+} from "../utils/deployConfigUtils";
 
 export const data = new SlashCommandBuilder()
     .setName("deploy")
@@ -725,21 +633,9 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
             }
 
             // Find which stack contains this service to get GitOps config
-            const config = getWhitelistConfig();
-            let stackConfig: StackConfig | null = null;
-            let stackName: string | null = null;
+            const stackInfo = findStackForService(serviceName);
 
-            if (config) {
-                for (const [name, stack] of Object.entries(config.stacks)) {
-                    if (stack.services.includes(serviceName)) {
-                        stackConfig = stack;
-                        stackName = name;
-                        break;
-                    }
-                }
-            }
-
-            if (!stackConfig || !stackName) {
+            if (!stackInfo) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle("❌ Stack Not Found")
@@ -754,6 +650,8 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
                 await i.update({ embeds: [errorEmbed], components: [] });
                 return;
             }
+
+            const { stackName, stackConfig } = stackInfo;
 
             // Create modal for tag details
             const modal = new ModalBuilder()
