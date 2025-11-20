@@ -292,6 +292,7 @@ async function handleGetTags(interaction: ChatInputCommandInteraction) {
         // Wait for selection
         const collector = message.createMessageComponentCollector({
             componentType: ComponentType.StringSelect,
+            filter: (i) => i.customId === "tags_service_select",
             time: 60000, // 1 minute
         });
 
@@ -595,6 +596,7 @@ async function handleCreateTag(interaction: ChatInputCommandInteraction) {
         // Wait for selection
         const collector = message.createMessageComponentCollector({
             componentType: ComponentType.StringSelect,
+            filter: (i) => i.customId === "create_tag_service_select",
             time: 60000, // 1 minute
         });
 
@@ -799,6 +801,7 @@ async function handleStackDeploy(
         // Wait for stack selection
         const collector = message.createMessageComponentCollector({
             componentType: ComponentType.StringSelect,
+            filter: (i) => i.customId === "stack_select",
             time: 60000, // 1 minute
         });
 

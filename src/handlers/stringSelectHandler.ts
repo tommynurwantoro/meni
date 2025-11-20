@@ -9,6 +9,14 @@ import { handleMarketplaceItemSelect } from "./selects/marketplaceStringSelectHa
 export async function handleStringSelect(interaction: StringSelectMenuInteraction): Promise<void> {
   const customId = interaction.customId;
 
+  // Deploy-related selects are handled by collectors in deploy.ts
+  // Skip them here to allow collectors to handle them
+  if (customId === "tags_service_select" || 
+      customId === "create_tag_service_select" || 
+      customId === "stack_select") {
+    return; // Let collectors handle these
+  }
+
   switch (customId) {
     case "thanks_category_select":
       await handleThanksCategorySelect(interaction);
