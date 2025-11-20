@@ -23,7 +23,7 @@ export async function showSholatRolePanel(interaction: ButtonInteraction) {
 
   const roleRow = new ActionRowBuilder().addComponents(
     new RoleSelectMenuBuilder()
-      .setCustomId(`sholat_role_select`)
+      .setCustomId(`sholat_role`)
       .setPlaceholder("Select role for sholat reminders notification")
       .setMinValues(1)
       .setMaxValues(1)

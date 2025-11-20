@@ -17,7 +17,7 @@ export function createPresensiRolePanel() {
     const roleRow = new ActionRowBuilder()
         .addComponents(
             new RoleSelectMenuBuilder()
-                .setCustomId(`presensi_role_select`)
+                .setCustomId(`presensi_role`)
                 .setPlaceholder('Select role for presensi reminders notification')
                 .setMinValues(1)
                 .setMaxValues(1)
