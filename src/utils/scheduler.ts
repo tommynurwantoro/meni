@@ -2,6 +2,7 @@ import * as cron from "node-cron";
 import { Client } from "discord.js";
 import { sendPresensiRemindersToAllGuilds } from "./presensiUtils";
 import { checkAndSendSholatReminders, updateDailyPrayerSchedule } from "./sholatUtils";
+import { checkAndSendReminders } from "./reminderUtils";
 
 /**
  * Initialize all scheduled tasks
@@ -44,10 +45,19 @@ export function initializeScheduler(client: Client): void {
     timezone: "Asia/Jakarta"
   });
 
+  // Check user reminders every minute
+  // Cron: * * * * * (every minute)
+  cron.schedule("* * * * *", async () => {
+    await checkAndSendReminders(client);
+  }, {
+    timezone: "Asia/Jakarta"
+  });
+
   console.log("✅ Scheduler initialized successfully");
   console.log("📅 Morning reminders: 07:55 (Monday-Friday)");
   console.log("📅 Evening reminders: 17:05 (Monday-Friday)");
   console.log("🕌 Prayer reminders: Every minute check");
+  console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
 }
 
@@ -62,5 +72,6 @@ export function getSchedulerStatus(): string {
          `- Morning presensi: 07:55 (Mon-Fri)\n` +
          `- Evening presensi: 17:05 (Mon-Fri)\n` +
          `- Prayer reminders: Every minute\n` +
+         `- User reminders: Every minute\n` +
          `- Prayer schedule update: 00:01 daily`;
 }
