@@ -13,7 +13,9 @@ export async function handleStringSelect(interaction: StringSelectMenuInteractio
   // Skip them here to allow collectors to handle them
   if (customId === "tags_service_select" || 
       customId === "create_tag_service_select" || 
-      customId === "stack_select") {
+      customId === "stack_select" ||
+      customId === "switch_tag_service_select" ||
+      customId.startsWith("switch_tag_tag_select_")) {
     return; // Let collectors handle these
   }
 
