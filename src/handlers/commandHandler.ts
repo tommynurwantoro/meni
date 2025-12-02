@@ -1,32 +1,49 @@
-import { ChatInputCommandInteraction, Collection, MessageFlags } from 'discord.js';
+import { ChatInputCommandInteraction, Collection, MessageFlags, Client } from 'discord.js';
+import { handleError, logError } from '../utils/errorHandler';
 
-export async function handleCommand(interaction: ChatInputCommandInteraction) {
-    const command = (interaction.client as any).commands.get(interaction.commandName);
+interface Command {
+    data: { name: string };
+    execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+    cooldown?: number;
+}
+
+interface ExtendedClient extends Client {
+    commands: Collection<string, Command>;
+    cooldowns: Collection<string, Collection<string, number>>;
+}
+
+export async function handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+    const client = interaction.client as ExtendedClient;
+    const command = client.commands.get(interaction.commandName);
 
     if (!command) {
-        console.error(`❌ Command ${interaction.commandName} not found`);
+        logError(`Command Handler - ${interaction.commandName}`, new Error('Command not found'));
         return;
     }
 
     // Cooldown handling
-    const { cooldowns } = interaction.client as any;
-    if (!cooldowns.has(command.data.name)) {
-        cooldowns.set(command.data.name, new Collection());
+    if (!client.cooldowns.has(command.data.name)) {
+        client.cooldowns.set(command.data.name, new Collection());
     }
 
     const now = Date.now();
-    const timestamps = cooldowns.get(command.data.name);
+    const timestamps = client.cooldowns.get(command.data.name);
+    if (!timestamps) {
+        return;
+    }
+
     const cooldownAmount = (command.cooldown || 3) * 1000;
 
     if (timestamps.has(interaction.user.id)) {
-        const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+        const expirationTime = timestamps.get(interaction.user.id)! + cooldownAmount;
 
         if (now < expirationTime) {
             const expiredTimestamp = Math.round(expirationTime / 1000);
-            return interaction.reply({
+            await interaction.reply({
                 content: `⏰ Please wait <t:${expiredTimestamp}:R> before using the \`${command.data.name}\` command again.`,
                 flags: MessageFlags.Ephemeral
             });
+            return;
         }
     }
 
@@ -36,17 +53,10 @@ export async function handleCommand(interaction: ChatInputCommandInteraction) {
     try {
         await command.execute(interaction);
     } catch (error) {
-        console.error(`❌ Error executing command ${interaction.commandName}:`, error);
-
-        const errorMessage = {
-            content: '❌ There was an error while executing this command!',
-            ephemeral: true
-        };
-
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(errorMessage);
-        } else {
-            await interaction.reply(errorMessage);
-        }
+        logError(`Command Handler - ${interaction.commandName}`, error);
+        await handleError(interaction, error, {
+            title: '❌ Command Error',
+            description: 'There was an error while executing this command!',
+        });
     }
 }
