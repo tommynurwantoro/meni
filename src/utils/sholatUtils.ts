@@ -13,19 +13,30 @@ interface SholatSchedule {
 }
 
 /**
+ * Gets today's date in YYYY-MM-DD format (using local timezone)
+ */
+function getTodayDateString(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Fetches prayer times from the API
  */
 export async function fetchPrayerTimes(): Promise<SholatSchedule | null> {
   try {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = getTodayDateString(); // YYYY-MM-DD format
     
-    // Construct API URL with year/month structure
-    const apiUrl = `https://raw.githubusercontent.com/lakuapik/jadwalsholatorg/master/adzan/yogyakarta/${year}/${month}.json`;
+    // Get kota ID from environment variable or use default (1505 = Yogyakarta)
+    const kotaId = process.env.SHOLAT_KOTA_ID || '1505';
     
-    console.log(`Fetching prayer times from: ${apiUrl}`);
+    // New API endpoint: GET https://api.myquran.com/v2/sholat/jadwal/{kota}/{date}
+    const apiUrl = process.env.SHOLAT_BASE_URL + `/${kotaId}/${todayStr}`;
+    
+    console.log(`🕌 Fetching prayer times from: ${apiUrl}`);
     
     const response = await fetch(apiUrl);
     
@@ -33,27 +44,27 @@ export async function fetchPrayerTimes(): Promise<SholatSchedule | null> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const data = await response.json();
+    const apiResponse = await response.json();
+
+    console.log(`🕌 API response: ${JSON.stringify(apiResponse)}`);
     
-    // Parse the API response and extract today's prayer times
-    const todayStr = `${year}-${month}-${day}`; // YYYY-MM-DD format
-    
-    // Find today's schedule in the response
-    const todaySchedule = data.find((schedule: any) => schedule.tanggal === todayStr);
-    
-    if (!todaySchedule) {
-      console.log(`No prayer schedule found for ${todayStr}`);
+    // Check API response status
+    if (!apiResponse.status || !apiResponse.data || !apiResponse.data.jadwal) {
+      console.log(`API returned error: ${apiResponse.message || 'Unknown error'}`);
       return null;
     }
     
+    // Extract prayer times from the response
+    const jadwal = apiResponse.data.jadwal;
+    
     // Convert the API response format to our expected format
     const prayers = [
-      { name: "Dzuhur", time: todaySchedule.dzuhur },
-      { name: "Ashar", time: todaySchedule.ashr },
+      { name: "Dzuhur", time: jadwal.dzuhur },
+      { name: "Ashar", time: jadwal.ashar },
     ];
     
     return {
-      date: todaySchedule.tanggal,
+      date: todayStr,
       prayers: prayers
     };
   } catch (error) {
@@ -143,8 +154,10 @@ export function getGuildsWithSholatEnabled(client: Client): string[] {
  */
 export async function checkAndSendSholatReminders(client: Client): Promise<void> {
   try {
-    // First try to get schedule from Redis
-    let prayerSchedule = await redisManager.getTodayPrayerSchedule();
+    const today = getTodayDateString(); // Use consistent date format
+    
+    // First try to get schedule from Redis using local date
+    let prayerSchedule = await redisManager.getPrayerSchedule(today);
     
     // If not in Redis, fetch from API and store it
     if (!prayerSchedule) {
@@ -160,9 +173,20 @@ export async function checkAndSendSholatReminders(client: Client): Promise<void>
       return;
     }
 
+    // Verify the schedule date matches today
+    if (prayerSchedule.date !== today) {
+      console.log(`Schedule date (${prayerSchedule.date}) doesn't match today (${today}), fetching new schedule...`);
+      prayerSchedule = await fetchPrayerTimes();
+      if (prayerSchedule) {
+        await redisManager.storePrayerSchedule(prayerSchedule);
+      } else {
+        console.log('Failed to fetch new prayer schedule');
+        return;
+      }
+    }
+
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-    const today = now.toISOString().split('T')[0];
     
     console.log(`Checking prayer times at ${currentTime}`);
 

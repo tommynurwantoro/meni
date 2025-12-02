@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Events, ChatInputCommandInteraction } from 'discord.js';
 import { config } from 'dotenv';
 import { readdirSync } from 'fs';
 import { join } from 'path';
@@ -6,12 +6,18 @@ import sequelize from './utils/database';
 import { syncDatabase } from './models';
 import { initializeScheduler } from './utils/scheduler';
 import { redisManager } from './utils/redis';
-import { initializePortainerClient } from './utils/portainerClient';
+import { initializePortainerClient, PortainerConfig } from './utils/portainerClient';
 
 // Extend Discord client with custom properties
+interface Command {
+    data: { name: string };
+    execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+    cooldown?: number;
+}
+
 declare module 'discord.js' {
     interface Client {
-        commands: Collection<string, any>;
+        commands: Collection<string, Command>;
         cooldowns: Collection<string, Collection<string, number>>;
     }
 }
@@ -133,7 +139,7 @@ const initializeBot = async () => {
     // Initialize Portainer client if configured
     if (process.env.PORTAINER_URL) {
         try {
-            const config: any = {
+            const config: PortainerConfig = {
                 url: process.env.PORTAINER_URL,
                 apiKey: process.env.PORTAINER_API_KEY,
                 username: process.env.PORTAINER_USERNAME,
@@ -165,7 +171,7 @@ const initializeBot = async () => {
         console.log('⚠️ PORTAINER_URL not configured - deployment features disabled');
     }
 
-    // // Load commands and events
+    // Load commands and events
     await loadCommands();
     await loadEvents();
 

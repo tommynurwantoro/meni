@@ -59,14 +59,6 @@ export function getWhitelistConfig(): WhitelistDeployConfig | null {
 }
 
 /**
- * Clear the config cache (useful for testing or when config changes)
- */
-export function clearConfigCache(): void {
-    cachedConfig = null;
-    configCacheTime = 0;
-}
-
-/**
  * Get all whitelisted endpoints
  */
 export function getWhitelistedEndpoints(): EndpointConfig[] {

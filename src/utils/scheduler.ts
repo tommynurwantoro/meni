@@ -60,18 +60,3 @@ export function initializeScheduler(client: Client): void {
   console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
 }
-
-/**
- * Get scheduler status
- */
-export function getSchedulerStatus(): string {
-  const tasks = cron.getTasks();
-  const taskCount = Object.keys(tasks).length;
-  
-  return `Scheduler Status: ${taskCount} active tasks\n` +
-         `- Morning presensi: 07:55 (Mon-Fri)\n` +
-         `- Evening presensi: 17:05 (Mon-Fri)\n` +
-         `- Prayer reminders: Every minute\n` +
-         `- User reminders: Every minute\n` +
-         `- Prayer schedule update: 00:01 daily`;
-}

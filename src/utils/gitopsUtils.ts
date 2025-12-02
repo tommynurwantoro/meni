@@ -132,17 +132,6 @@ export function generateCommitMessage(serviceName: string, newTag: string, oldTa
 }
 
 /**
- * Extract service name from stack-based service name pattern
- * 
- * @param stackServiceName - The Docker Swarm service name (stack_service)
- * @param config - Service configuration with serviceName mapping
- * @returns The actual service name to use in YAML
- */
-export function getActualServiceName(stackServiceName: string, config?: { serviceName?: string }): string {
-    return config?.serviceName || stackServiceName;
-}
-
-/**
  * Validate YAML content before uploading to GitLab
  * 
  * @param yamlContent - The YAML content to validate
