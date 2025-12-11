@@ -30,6 +30,11 @@ services:
       - GITLAB_URL=${GITLAB_URL}
       - GITLAB_MENI_TOKEN=${GITLAB_MENI_TOKEN}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+
+      # N8N Configuration
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_USERNAME=${N8N_USERNAME}
+      - N8N_PASSWORD=${N8N_PASSWORD}
       
       # Deploy Role Configuration
       - DEPLOY_ROLE_ID=${DEPLOY_ROLE_ID}

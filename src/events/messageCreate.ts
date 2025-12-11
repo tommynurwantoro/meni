@@ -1,5 +1,6 @@
 import { Events, Message } from 'discord.js';
 import { ConfigManager } from '../utils/config';
+import { callN8NWebhook, N8NWebhookError } from '../utils/n8nWebhook';
 
 export const name = Events.MessageCreate;
 export const once = false;
@@ -7,6 +8,75 @@ export const once = false;
 export async function execute(message: Message) {
     // Ignore bot messages and DMs
     if (message.author.bot || !message.guildId) return;
+
+    // Check if message mentions the bot or is a reply to a bot message
+    const isBotMentioned = message.mentions.has(message.client.user);
+    let isReplyToBot = false;
+    let referencedMessageContent: string | undefined;
+
+    // Check if this is a reply to a bot message
+    if (message.reference && message.reference.messageId) {
+        try {
+            const referencedMessage = await message.channel.messages.fetch(message.reference.messageId);
+            if (referencedMessage.author.id === message.client.user.id) {
+                isReplyToBot = true;
+            }
+            // Store referenced message content for context (regardless of author)
+            referencedMessageContent = referencedMessage.content;
+        } catch (error) {
+            // If we can't fetch the referenced message, continue without checking
+            console.error('Error fetching referenced message:', error);
+        }
+    }
+
+    // Handle AI integration if bot is mentioned or message is a reply to bot
+    if (isBotMentioned || isReplyToBot) {
+        try {
+            // Show typing indicator
+            if ('sendTyping' in message.channel) {
+                message.channel.sendTyping().catch(() => {
+                    // Ignore errors with typing indicator
+                });
+            }
+
+            // Call n8n webhook with message content, guildId, userId, and referenced message as context
+            const aiOutput = await callN8NWebhook(
+                message.content,
+                message.guildId!,
+                message.author.id,
+                referencedMessageContent
+            );
+
+            // Reply to the user with AI output
+            if (aiOutput && aiOutput.trim()) {
+                await message.reply({
+                    content: aiOutput
+                });
+            } else {
+                await message.reply({
+                    content: 'Sorry, I received an empty response from my brain.'
+                });
+            }
+        } catch (error) {
+            console.error('Error calling n8n webhook:', error);
+            
+            // Notify user of error
+            const errorMessage = error instanceof Object && 'message' in error
+                ? (error as N8NWebhookError).message
+                : 'An error occurred while processing your request.';
+
+            try {
+                await message.reply({
+                    content: `⚠️ **Error**: ${errorMessage}`
+                });
+            } catch (replyError) {
+                console.error('Error sending error message to user:', replyError);
+            }
+        }
+
+        // Return early after handling AI integration
+        // Continue with link protection check below
+    }
 
     // Check if link protection is enabled
     const config = ConfigManager.getGuildConfig(message.guildId);
