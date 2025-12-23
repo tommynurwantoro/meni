@@ -3,6 +3,7 @@ import { Client } from "discord.js";
 import { sendPresensiRemindersToAllGuilds } from "./presensiUtils";
 import { checkAndSendSholatReminders, updateDailyPrayerSchedule } from "./sholatUtils";
 import { checkAndSendReminders } from "./reminderUtils";
+import { checkAttendanceForOnlineUsers } from "./attendanceUtils";
 
 /**
  * Initialize all scheduled tasks
@@ -53,10 +54,39 @@ export function initializeScheduler(client: Client): void {
     timezone: "Asia/Jakarta"
   });
 
+  if (process.env.ATTENDANCE_ENABLED === "true") {
+    // Attendance clock-in check at 09:00 (Monday to Friday)
+    // Cron: 0 9 * * 1-5 (0 minutes, 9 hours, any day of month, Monday to Friday)
+    cron.schedule("0 9 * * 1-5", async () => {
+      console.log("🕐 Attendance clock-in check triggered");
+      const guildId = process.env.ATTENDANCE_GUILD_ID;
+      if (!guildId) {
+        console.log("⚠️ ATTENDANCE_GUILD_ID not set in environment variables");
+        return;
+      }
+      const baseUrl = process.env.ATTENDANCE_BASE_URL || "";
+      if (!baseUrl) {
+        console.log("⚠️ ATTENDANCE_BASE_URL not set in environment variables");
+        return;
+      }
+      const apiKey = process.env.ATTENDANCE_API_KEY || "";
+      if (!apiKey) {
+        console.log("⚠️ ATTENDANCE_API_KEY not set in environment variables");
+        return;
+      }
+      await checkAttendanceForOnlineUsers(client, guildId, baseUrl, apiKey);
+    }, {
+      timezone: "Asia/Jakarta"
+    });
+  }
+
   console.log("✅ Scheduler initialized successfully");
   console.log("📅 Morning reminders: 07:55 (Monday-Friday)");
   console.log("📅 Evening reminders: 17:05 (Monday-Friday)");
   console.log("🕌 Prayer reminders: Every minute check");
   console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
+  if (process.env.ATTENDANCE_ENABLED === "true") {
+    console.log("🕐 Attendance check: 09:00 (Monday-Friday)");
+  }
 }
