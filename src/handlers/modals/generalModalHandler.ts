@@ -138,6 +138,33 @@ export async function handleThanksReasonModal(interaction: ModalSubmitInteractio
     );
 
     if (result.success) {
+      // Add 5 points to the user who gave thanks (the giver)
+      let giverRewardResult;
+      try {
+        giverRewardResult = await addPoints(
+          interaction.user.id,
+          guildId,
+          5, // Give 5 points to the giver
+          "reward",
+          undefined, // No fromUserId for system reward
+          "thanks_giver_reward",
+          `Reward for giving thanks to ${selectedUser.displayName}`,
+          {
+            timestamp: new Date().toISOString(),
+            thanksGiver: interaction.user.displayName,
+            thanksReceiver: selectedUser.displayName,
+            relatedTransaction: "thanks_given",
+          }
+        );
+        if (!giverRewardResult.success) {
+          console.error(`Failed to reward giver: ${giverRewardResult.message}`);
+        }
+      } catch (error) {
+        console.error("Error rewarding giver:", error);
+        // Continue even if giver reward fails - main thanks transaction succeeded
+        giverRewardResult = { success: false, newBalance: undefined };
+      }
+
       // Update weekly counters
       await redisManager.incrementWeeklyThanksCount(
         interaction.user.id,
@@ -173,8 +200,13 @@ export async function handleThanksReasonModal(interaction: ModalSubmitInteractio
             inline: true,
           },
           {
-            name: "New Balance",
-            value: result.newBalance?.toString() || "Unknown",
+            name: "🎁 Reward Earned",
+            value: giverRewardResult?.success ? "You received 5 points!" : "Reward processing...",
+            inline: true,
+          },
+          {
+            name: "Your New Balance",
+            value: giverRewardResult?.newBalance?.toString() || "Unknown",
             inline: true,
           },
           {
