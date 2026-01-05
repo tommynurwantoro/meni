@@ -38,26 +38,27 @@ export function initializeScheduler(client: Client): void {
     timezone: "Asia/Jakarta"
   });
 
-  // Check prayer times every minute
+  // Merged check for prayer times and user reminders every minute
   // Cron: * * * * * (every minute)
   cron.schedule("* * * * *", async () => {
     await checkAndSendSholatReminders(client);
-  }, {
-    timezone: "Asia/Jakarta"
-  });
-
-  // Check user reminders every minute
-  // Cron: * * * * * (every minute)
-  cron.schedule("* * * * *", async () => {
     await checkAndSendReminders(client);
   }, {
     timezone: "Asia/Jakarta"
   });
 
   if (process.env.ATTENDANCE_ENABLED === "true") {
+    const schedule = process.env.ATTENDANCE_TIME || "09:00";
+    // convert schedule HH:mm to cron expression mm HH * * 1-5
+    // 09:30 -> 30 9 * * 1-5
+    // 09 to 9
+    const hours = schedule.split(":")[0].replace(/^0/, ""); // remove leading 0
+    const minutes = schedule.split(":")[1].replace(/^0/, ""); // remove leading 0
+    const cronExpression = `${minutes} ${hours} * * 1-5`;
+    
     // Attendance clock-in check at 09:00 (Monday to Friday)
     // Cron: 0 9 * * 1-5 (0 minutes, 9 hours, any day of month, Monday to Friday)
-    cron.schedule("0 9 * * 1-5", async () => {
+    cron.schedule(cronExpression, async () => {
       console.log("🕐 Attendance clock-in check triggered");
       const guildId = process.env.ATTENDANCE_GUILD_ID;
       if (!guildId) {
@@ -87,6 +88,6 @@ export function initializeScheduler(client: Client): void {
   console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
   if (process.env.ATTENDANCE_ENABLED === "true") {
-    console.log("🕐 Attendance check: 09:00 (Monday-Friday)");
+    console.log(`🕐 Attendance check: ${process.env.ATTENDANCE_TIME} (Monday-Friday)`);
   }
 }
