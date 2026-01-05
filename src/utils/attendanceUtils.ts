@@ -7,13 +7,8 @@ import { join } from "path";
  * API response structure for successful attendance clock-in
  */
 interface AttendanceApiResponse {
-  success: boolean;
+  status: string;
   message: string;
-  data: {
-    date: string;
-    emp_code: string;
-    time: string;
-  };
 }
 
 /**
@@ -23,11 +18,6 @@ interface AttendanceResult {
   discordId: string;
   username: string;
   status: "success" | "failed";
-  apiResponse?: {
-    date: string;
-    emp_code: string;
-    time: string;
-  };
   error?: string;
 }
 
@@ -49,7 +39,7 @@ export interface AttendanceReport {
  */
 async function callAttendanceApi(discordId: string, baseUrl: string, apiKey: string): Promise<{
   success: boolean;
-  data?: AttendanceApiResponse["data"];
+  message?: string;
   error?: string;
 }> {
   try {
@@ -67,10 +57,10 @@ async function callAttendanceApi(discordId: string, baseUrl: string, apiKey: str
       }
     );
 
-    if (response.status === 200 && response.data.success) {
+    if (response.status === 200 && response.data.status === "00") {
       return {
         success: true,
-        data: response.data.data,
+        message: response.data.message,
       };
     } else {
       return {
@@ -219,12 +209,11 @@ export async function checkAttendanceForOnlineUsers(
         // Call attendance API
         const result = await callAttendanceApi(discordId, baseUrl, apiKey);
 
-        if (result.success && result.data) {
+        if (result.success && result.message) {
           report.results.push({
             discordId,
             username,
             status: "success",
-            apiResponse: result.data,
           });
           report.checkedInUsers++;
           console.log(`✅ Checked in: ${username} (${discordId})`);
