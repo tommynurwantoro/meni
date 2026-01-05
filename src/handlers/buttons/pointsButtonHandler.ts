@@ -11,6 +11,8 @@ import { ConfigManager } from "../../utils/config";
 import { showPointsConfigPanel } from "../../views/points/pointsConfigPanel";
 import { showPointsLogsChannelPanel } from "../../views/points/pointsLogsChannelPanel";
 import { showPointsThanksChannelPanel } from "../../views/points/pointsThanksChannelPanel";
+import { showAchievementRoleUserPanel } from "../../views/points/achievementRoleUserPanel";
+import { showAchievementRoleMentionPanel } from "../../views/points/achievementRoleMentionPanel";
 import {
   getUserBalance,
 } from "../../utils/pointsUtils";
@@ -36,6 +38,14 @@ export async function handlePointsButton(interaction: ButtonInteraction) {
 
       case "points_thanks_channel":
         await handlePointsThanksChannel(interaction);
+        break;
+
+      case "points_achievement_role_user":
+        await handleAchievementRoleUser(interaction);
+        break;
+
+      case "points_achievement_role_mention":
+        await handleAchievementRoleMention(interaction);
         break;
 
       case "points_toggle":
@@ -71,6 +81,14 @@ async function handlePointsLogsChannel(interaction: ButtonInteraction) {
 
 async function handlePointsThanksChannel(interaction: ButtonInteraction) {
   await showPointsThanksChannelPanel(interaction);
+}
+
+async function handleAchievementRoleUser(interaction: ButtonInteraction) {
+  await showAchievementRoleUserPanel(interaction);
+}
+
+async function handleAchievementRoleMention(interaction: ButtonInteraction) {
+  await showAchievementRoleMentionPanel(interaction);
 }
 
 async function handlePointsToggle(interaction: ButtonInteraction) {
@@ -127,9 +145,9 @@ async function handlePointsToggle(interaction: ButtonInteraction) {
         .setTitle("👍 Thanks!")
         .setDescription(
           "• Give thanks to other members to earn them points\n" +
-            "• Check your balance anytime\n" +
-            "• Points can be used in the marketplace\n\n" +
-            "Use the buttons below to get started!"
+          "• Check your balance anytime\n" +
+          "• Points can be used in the marketplace\n\n" +
+          "Use the buttons below to get started!"
         )
         .setFooter({ text: "Powered by MENI" })
         .setTimestamp();

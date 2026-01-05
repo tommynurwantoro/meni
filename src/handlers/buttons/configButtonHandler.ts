@@ -95,6 +95,8 @@ export async function handleResetConfirm(interaction: ButtonInteraction): Promis
         logsChannel: "",
         thanksChannel: "",
         enabled: false,
+        achievementRoleUser: "",
+        achievementRoleMention: "",
         marketplace: {
           enabled: false,
           channel: "",

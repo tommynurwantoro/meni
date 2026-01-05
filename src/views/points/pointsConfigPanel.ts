@@ -44,6 +44,20 @@ export async function createPointsConfigPanel(guildId: string) {
         name: "🔧 Status",
         value: pointsConfig?.enabled ? "✅ Enabled" : "❌ Disabled",
         inline: true,
+      },
+      {
+        name: "👤 Achievement Role User",
+        value: pointsConfig?.achievementRoleUser
+          ? `<@&${pointsConfig.achievementRoleUser}>`
+          : "❌ Not set",
+        inline: true,
+      },
+      {
+        name: "🏆 Achievement Role Mention",
+        value: pointsConfig?.achievementRoleMention
+          ? `<@&${pointsConfig.achievementRoleMention}>`
+          : "❌ Not set",
+        inline: true,
       }
     )
     .setFooter({ text: "Powered by MENI" })
@@ -59,7 +73,20 @@ export async function createPointsConfigPanel(guildId: string) {
       .setCustomId("points_thanks_channel")
       .setLabel("Set Thanks Channel")
       .setStyle(ButtonStyle.Primary)
-      .setEmoji("🙏")
+      .setEmoji("🙏"),
+    new ButtonBuilder()
+      .setCustomId("points_achievement_role_user")
+      .setLabel("Set Achievement Role User")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("👤")
+  );
+
+  const row1b = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("points_achievement_role_mention")
+      .setLabel("Set Achievement Role Mention")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("🏆")
   );
 
   const row2 = new ActionRowBuilder().addComponents(
@@ -81,7 +108,7 @@ export async function createPointsConfigPanel(guildId: string) {
 
   return {
     embed: configEmbed,
-    components: [row1, row2, row3],
+    components: [row1, row1b, row2, row3],
   };
 }
 
@@ -99,6 +126,7 @@ export async function showPointsConfigPanel(
       panel.components[0] as any,
       panel.components[1] as any,
       panel.components[2] as any,
+      panel.components[3] as any,
     ],
   });
 }

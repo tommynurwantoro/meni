@@ -32,7 +32,33 @@ export const cooldown = 5;
 async function checkAchievementPermissions(
   interaction: ChatInputCommandInteraction
 ): Promise<boolean> {
-  const allowedRoleId = process.env.ACHIEVEMENT_ROLE_ID;
+  // Check if interaction is from a guild (not DM)
+  if (!interaction.guild) {
+    const dmEmbed = new EmbedBuilder()
+      .setColor(0xff0000)
+      .setTitle("❌ Access Denied")
+      .setDescription("Achievement command can only be used in a server.")
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [dmEmbed], ephemeral: true });
+    return false;
+  }
+
+  const guildId = interaction.guildId;
+  if (!guildId) {
+    const noGuildEmbed = new EmbedBuilder()
+      .setColor(0xff0000)
+      .setTitle("❌ Configuration Error")
+      .setDescription("Could not access guild information.")
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [noGuildEmbed], ephemeral: true });
+    return false;
+  }
+
+  // Get configuration for this guild
+  const config = ConfigManager.getGuildConfig(guildId);
+  const allowedRoleId = config?.points?.achievementRoleUser;
 
   if (!allowedRoleId) {
     // If not set, restrict to prevent unauthorized usage
@@ -45,18 +71,6 @@ async function checkAchievementPermissions(
       .setTimestamp();
 
     await interaction.reply({ embeds: [noConfigEmbed], ephemeral: true });
-    return false;
-  }
-
-  // Check if interaction is from a guild (not DM)
-  if (!interaction.guild) {
-    const dmEmbed = new EmbedBuilder()
-      .setColor(0xff0000)
-      .setTitle("❌ Access Denied")
-      .setDescription("Achievement command can only be used in a server.")
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [dmEmbed], ephemeral: true });
     return false;
   }
 
@@ -219,9 +233,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       flags: MessageFlags.Ephemeral,
     });
 
+    // Build mention content for logs channel
+    const achievementRoleMention = config?.points?.achievementRoleMention;
+    let mentionContent = `<@${targetUser.id}>`;
+    if (achievementRoleMention) {
+      mentionContent = `<@&${achievementRoleMention}> ${mentionContent}`;
+    }
+
     // Send embed to logs channel
     await logsChannel.send({
-      content: `<@${targetUser.id}>`,
+      content: mentionContent,
       embeds: [achievementEmbed],
     });
   } catch (error) {

@@ -40,7 +40,12 @@ export async function handlePointsLogsChannel(
 
         await message.edit({
           embeds: [panel.embed],
-          components: [panel.components[0] as any, panel.components[1] as any],
+          components: [
+            panel.components[0] as any,
+            panel.components[1] as any,
+            panel.components[2] as any,
+            panel.components[3] as any,
+          ],
         });
 
         await interaction.reply({
@@ -98,7 +103,12 @@ export async function handlePointsThanksChannel(
 
         await message.edit({
           embeds: [panel.embed],
-          components: [panel.components[0] as any, panel.components[1] as any],
+          components: [
+            panel.components[0] as any,
+            panel.components[1] as any,
+            panel.components[2] as any,
+            panel.components[3] as any,
+          ],
         });
       }
     }

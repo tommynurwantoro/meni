@@ -23,6 +23,8 @@ export interface GuildConfig {
         logsChannel?: string;
         thanksChannel?: string;
         enabled?: boolean;
+        achievementRoleUser?: string;
+        achievementRoleMention?: string;
         marketplace?: {
             enabled?: boolean;
             channel?: string;
