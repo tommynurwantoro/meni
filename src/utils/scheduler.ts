@@ -48,7 +48,7 @@ export function initializeScheduler(client: Client): void {
   });
 
   if (process.env.ATTENDANCE_ENABLED === "true") {
-    const schedule = process.env.ATTENDANCE_TIME || "09:00";
+    const schedule = process.env.ATTENDANCE_IN_TIME || "08:00";
     // convert schedule HH:mm to cron expression mm HH * * 1-5
     // 09:30 -> 30 9 * * 1-5
     // 09 to 9
@@ -74,7 +74,7 @@ export function initializeScheduler(client: Client): void {
       timezone: "Asia/Jakarta"
     });
 
-    const outSchedule = process.env.ATTENDANCE_OUT_TIME || "17:05";
+    const outSchedule = process.env.ATTENDANCE_OUT_TIME || "17:00";
     const outHours = outSchedule.split(":")[0].replace(/^0/, "");
     const outMinutes = outSchedule.split(":")[1].replace(/^0/, "");
     const outCronExpression = `${outMinutes} ${outHours} * * 1-5`;
@@ -105,7 +105,7 @@ export function initializeScheduler(client: Client): void {
   console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
   if (process.env.ATTENDANCE_ENABLED === "true") {
-    console.log(`🕐 Attendance clock-in check: ${process.env.ATTENDANCE_TIME || "09:00"} (Monday-Friday)`);
-    console.log(`🕐 Attendance clock-out check: ${process.env.ATTENDANCE_OUT_TIME || "17:05"} (Monday-Friday)`);
+    console.log(`🕐 Attendance clock-in check: ${process.env.ATTENDANCE_IN_TIME || "08:00"} (Monday-Friday)`);
+    console.log(`🕐 Attendance clock-out check: ${process.env.ATTENDANCE_OUT_TIME || "17:00"} (Monday-Friday)`);
   }
 }
