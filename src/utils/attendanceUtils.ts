@@ -285,15 +285,39 @@ export async function promptAttendanceForOnlineUsers(
   try {
     console.log(`🕐 Starting attendance prompt for guild ${guildId}`);
 
-    const onlineMembers = await getOnlineMembers(client, guildId);
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      console.log(`⚠️ Guild ${guildId} not found for attendance prompt`);
+      return;
+    }
 
-    if (onlineMembers.length === 0) {
-      console.log(`⚠️ No online members found in guild ${guildId} for attendance prompt`);
+    console.log(`📥 Fetching members for guild ${guildId} for attendance prompt...`);
+    const members = await guild.members.fetch();
+
+    const excludedRoleId = process.env.ATTENDANCE_EXCLUDE_ROLE_ID;
+
+    const targetMembers = members.filter((member) => {
+      if (member.user.bot) return false;
+
+      // Skip members that have the excluded role configured via environment variable
+      if (excludedRoleId && member.roles.cache.has(excludedRoleId)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (targetMembers.size === 0) {
+      console.log(
+        `⚠️ No eligible members found in guild ${guildId} for attendance prompt (after applying bot/role exclusions)`
+      );
       return;
     }
 
     console.log(
-      `📨 Sending attendance ${type === "in" ? "clock-in" : "clock-out"} prompt to ${onlineMembers.length} users...`
+      `📨 Sending attendance ${
+        type === "in" ? "clock-in" : "clock-out"
+      } prompt to ${targetMembers.size} users...`
     );
 
     const promptEmbed = new EmbedBuilder()
@@ -318,19 +342,7 @@ export async function promptAttendanceForOnlineUsers(
         .setStyle(ButtonStyle.Secondary)
     );
 
-    const excludedRoleId = process.env.ATTENDANCE_EXCLUDE_ROLE_ID;
-
-    for (const member of onlineMembers) {
-      if (member.user.bot) continue;
-
-      // Skip members that have the excluded role configured via environment variable
-      if (excludedRoleId && member.roles.cache.has(excludedRoleId)) {
-        console.log(
-          `⏭️ Skipping attendance prompt for ${member.user.tag} (${member.id}) due to excluded role ${excludedRoleId}`
-        );
-        continue;
-      }
-
+    for (const member of targetMembers.values()) {
       try {
         await member.send({
           embeds: [promptEmbed],
