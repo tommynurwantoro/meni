@@ -48,7 +48,7 @@ export async function handleAttendanceButton(interaction: ButtonInteraction) {
 
     try {
       const result = await callAttendanceApi(user.id, baseUrl, apiKey);
-
+      
       if (result.success && result.message) {
         const successEmbed = new EmbedBuilder()
           .setColor("#00B894")

@@ -297,7 +297,6 @@ export async function promptAttendanceForOnlineUsers(
       .setColor("#00B894")
       .setTitle("⏰ Attendance Reminder")
       .setDescription(
-        "Kamu terdeteksi **online** di Discord.\n\n" +
           "Apakah kamu ingin melakukan **presensi masuk** sekarang?\n\n" +
           "Klik **Yes** untuk melakukan presensi, atau **No** jika tidak ingin."
       )
@@ -316,6 +315,7 @@ export async function promptAttendanceForOnlineUsers(
     );
 
     for (const member of onlineMembers) {
+      if (member.user.bot) continue;
       try {
         await member.send({
           embeds: [promptEmbed],
