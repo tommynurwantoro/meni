@@ -300,6 +300,7 @@ export async function promptAttendanceForOnlineUsers(
       .setColor("#00B894")
       .setTitle("⏰ Attendance Reminder")
       .setDescription(
+        `Halo, Meni mau bantu kamu melakukan presensi nih.\n\n` +
         `Apakah kamu ingin melakukan **presensi ${type === "in" ? "masuk" : "pulang"}** sekarang?\n\n` +
           "Klik **Yes** untuk melakukan presensi, atau **No** jika tidak ingin."
       )
