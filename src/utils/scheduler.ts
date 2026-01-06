@@ -3,7 +3,7 @@ import { Client } from "discord.js";
 import { sendPresensiRemindersToAllGuilds } from "./presensiUtils";
 import { checkAndSendSholatReminders, updateDailyPrayerSchedule } from "./sholatUtils";
 import { checkAndSendReminders } from "./reminderUtils";
-import { checkAttendanceForOnlineUsers } from "./attendanceUtils";
+import { promptAttendanceForOnlineUsers } from "./attendanceUtils";
 
 /**
  * Initialize all scheduled tasks
@@ -70,12 +70,7 @@ export function initializeScheduler(client: Client): void {
         console.log("⚠️ ATTENDANCE_BASE_URL not set in environment variables");
         return;
       }
-      const apiKey = process.env.ATTENDANCE_API_KEY || "";
-      if (!apiKey) {
-        console.log("⚠️ ATTENDANCE_API_KEY not set in environment variables");
-        return;
-      }
-      await checkAttendanceForOnlineUsers(client, guildId, baseUrl, apiKey);
+      await promptAttendanceForOnlineUsers(client, guildId);
     }, {
       timezone: "Asia/Jakarta"
     });

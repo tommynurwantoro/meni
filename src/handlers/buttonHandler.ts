@@ -9,6 +9,7 @@ import { handleSholatButton } from "./buttons/sholatButtonHandler";
 import { handlePointsButton } from "./buttons/pointsButtonHandler";
 import { handleReviewButton } from "./buttons/reviewButtonHandler";
 import { handleBackButton } from "./buttons/navigationButtonHandler";
+import { handleAttendanceButton } from "./buttons/attendanceButtonHandler";
 import { showMainConfigPanel } from "../views";
 
 /**
@@ -75,6 +76,11 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
 
   if (customId.startsWith("presensi_")) {
     await handlePresensiButton(interaction);
+    return;
+  }
+
+  if (customId.startsWith("attendance_")) {
+    await handleAttendanceButton(interaction);
     return;
   }
 

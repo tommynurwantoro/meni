@@ -1,4 +1,11 @@
-import { Client, GuildMember } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Client,
+  EmbedBuilder,
+  GuildMember,
+} from "discord.js";
 import axios, { AxiosError } from "axios";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
@@ -37,7 +44,11 @@ export interface AttendanceReport {
 /**
  * Call attendance API for a single user
  */
-async function callAttendanceApi(discordId: string, baseUrl: string, apiKey: string): Promise<{
+export async function callAttendanceApi(
+  discordId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<{
   success: boolean;
   message?: string;
   error?: string;
@@ -261,4 +272,66 @@ export async function checkAttendanceForOnlineUsers(
     return null;
   }
 }
+
+/**
+ * Send attendance prompt DMs to all online users in a Discord guild.
+ * Users can choose whether they want to check in.
+ */
+export async function promptAttendanceForOnlineUsers(
+  client: Client,
+  guildId: string
+): Promise<void> {
+  try {
+    console.log(`🕐 Starting attendance prompt for guild ${guildId}`);
+
+    const onlineMembers = await getOnlineMembers(client, guildId);
+
+    if (onlineMembers.length === 0) {
+      console.log(`⚠️ No online members found in guild ${guildId} for attendance prompt`);
+      return;
+    }
+
+    console.log(`📨 Sending attendance prompt to ${onlineMembers.length} users...`);
+
+    const promptEmbed = new EmbedBuilder()
+      .setColor("#00B894")
+      .setTitle("⏰ Attendance Reminder")
+      .setDescription(
+        "Kamu terdeteksi **online** di Discord.\n\n" +
+          "Apakah kamu ingin melakukan **presensi masuk** sekarang?\n\n" +
+          "Klik **Yes** untuk melakukan presensi, atau **No** jika tidak ingin."
+      )
+      .setFooter({ text: "Powered by MENI" })
+      .setTimestamp();
+
+    const components = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`attendance_yes:${guildId}`)
+        .setLabel("Yes")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`attendance_no:${guildId}`)
+        .setLabel("No")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    for (const member of onlineMembers) {
+      try {
+        await member.send({
+          embeds: [promptEmbed],
+          components: [components],
+        });
+        console.log(`📨 Attendance prompt sent to ${member.user.tag} (${member.id})`);
+      } catch (error) {
+        console.error(
+          `❌ Failed to send attendance prompt DM to ${member.user.tag} (${member.id})`,
+          error
+        );
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Error sending attendance prompts for guild ${guildId}:`, error);
+  }
+}
+
 
