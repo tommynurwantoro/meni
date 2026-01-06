@@ -317,8 +317,19 @@ export async function promptAttendanceForOnlineUsers(
         .setStyle(ButtonStyle.Secondary)
     );
 
+    const excludedRoleId = process.env.ATTENDANCE_EXCLUDE_ROLE_ID;
+
     for (const member of onlineMembers) {
       if (member.user.bot) continue;
+
+      // Skip members that have the excluded role configured via environment variable
+      if (excludedRoleId && member.roles.cache.has(excludedRoleId)) {
+        console.log(
+          `⏭️ Skipping attendance prompt for ${member.user.tag} (${member.id}) due to excluded role ${excludedRoleId}`
+        );
+        continue;
+      }
+
       try {
         await member.send({
           embeds: [promptEmbed],

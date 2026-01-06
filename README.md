@@ -69,6 +69,17 @@ ENCRYPTION_KEY=your-secure-encryption-key-minimum-32-characters
 # Only users with this role ID can use deploy commands
 # Leave empty to allow everyone
 DEPLOY_ROLE_ID=1234567890123456789
+
+# Attendance Configuration (optional)
+# Enable scheduled attendance prompts and integration
+ATTENDANCE_ENABLED=true
+ATTENDANCE_GUILD_ID=your_guild_id_here
+ATTENDANCE_BASE_URL=https://your-attendance-service/endpoint
+ATTENDANCE_API_KEY=your_attendance_api_key_here
+ATTENDANCE_IN_TIME=08:00
+ATTENDANCE_OUT_TIME=17:00
+# Users with this role will NOT receive attendance DMs
+ATTENDANCE_EXCLUDE_ROLE_ID=role_id_to_exclude_from_attendance_dm
 ```
 
 **Note**: 
