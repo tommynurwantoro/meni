@@ -279,7 +279,8 @@ export async function checkAttendanceForOnlineUsers(
  */
 export async function promptAttendanceForOnlineUsers(
   client: Client,
-  guildId: string
+  guildId: string,
+  type: "in" | "out" = "in"
 ): Promise<void> {
   try {
     console.log(`🕐 Starting attendance prompt for guild ${guildId}`);
@@ -291,13 +292,15 @@ export async function promptAttendanceForOnlineUsers(
       return;
     }
 
-    console.log(`📨 Sending attendance prompt to ${onlineMembers.length} users...`);
+    console.log(
+      `📨 Sending attendance ${type === "in" ? "clock-in" : "clock-out"} prompt to ${onlineMembers.length} users...`
+    );
 
     const promptEmbed = new EmbedBuilder()
       .setColor("#00B894")
       .setTitle("⏰ Attendance Reminder")
       .setDescription(
-          "Apakah kamu ingin melakukan **presensi masuk** sekarang?\n\n" +
+        `Apakah kamu ingin melakukan **presensi ${type === "in" ? "masuk" : "pulang"}** sekarang?\n\n` +
           "Klik **Yes** untuk melakukan presensi, atau **No** jika tidak ingin."
       )
       .setFooter({ text: "Powered by MENI" })

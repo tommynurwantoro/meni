@@ -55,9 +55,8 @@ export function initializeScheduler(client: Client): void {
     const hours = schedule.split(":")[0].replace(/^0/, ""); // remove leading 0
     const minutes = schedule.split(":")[1].replace(/^0/, ""); // remove leading 0
     const cronExpression = `${minutes} ${hours} * * 1-5`;
-    
-    // Attendance clock-in check at 09:00 (Monday to Friday)
-    // Cron: 0 9 * * 1-5 (0 minutes, 9 hours, any day of month, Monday to Friday)
+
+    // Attendance clock-in check (Monday to Friday)
     cron.schedule(cronExpression, async () => {
       console.log("🕐 Attendance clock-in check triggered");
       const guildId = process.env.ATTENDANCE_GUILD_ID;
@@ -70,7 +69,30 @@ export function initializeScheduler(client: Client): void {
         console.log("⚠️ ATTENDANCE_BASE_URL not set in environment variables");
         return;
       }
-      await promptAttendanceForOnlineUsers(client, guildId);
+      await promptAttendanceForOnlineUsers(client, guildId, "in");
+    }, {
+      timezone: "Asia/Jakarta"
+    });
+
+    const outSchedule = process.env.ATTENDANCE_OUT_TIME || "17:05";
+    const outHours = outSchedule.split(":")[0].replace(/^0/, "");
+    const outMinutes = outSchedule.split(":")[1].replace(/^0/, "");
+    const outCronExpression = `${outMinutes} ${outHours} * * 1-5`;
+
+    // Attendance clock-out check (Monday to Friday)
+    cron.schedule(outCronExpression, async () => {
+      console.log("🕐 Attendance clock-out check triggered");
+      const guildId = process.env.ATTENDANCE_GUILD_ID;
+      if (!guildId) {
+        console.log("⚠️ ATTENDANCE_GUILD_ID not set in environment variables");
+        return;
+      }
+      const baseUrl = process.env.ATTENDANCE_BASE_URL || "";
+      if (!baseUrl) {
+        console.log("⚠️ ATTENDANCE_BASE_URL not set in environment variables");
+        return;
+      }
+      await promptAttendanceForOnlineUsers(client, guildId, "out");
     }, {
       timezone: "Asia/Jakarta"
     });
@@ -83,6 +105,7 @@ export function initializeScheduler(client: Client): void {
   console.log("⏰ User reminders: Every minute check");
   console.log("📅 Prayer schedule update: 00:01 daily");
   if (process.env.ATTENDANCE_ENABLED === "true") {
-    console.log(`🕐 Attendance check: ${process.env.ATTENDANCE_TIME} (Monday-Friday)`);
+    console.log(`🕐 Attendance clock-in check: ${process.env.ATTENDANCE_TIME || "09:00"} (Monday-Friday)`);
+    console.log(`🕐 Attendance clock-out check: ${process.env.ATTENDANCE_OUT_TIME || "17:05"} (Monday-Friday)`);
   }
 }
