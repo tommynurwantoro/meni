@@ -1,8 +1,4 @@
 import { ModalSubmitInteraction, MessageFlags, EmbedBuilder } from "discord.js";
-import { validateServiceExists, extractCurrentImageTag, updateImageTagInYaml, generateCommitMessage, validateYamlContent } from "../../utils/gitopsUtils";
-import { monitorPipelineStatus } from "../../utils/pipelineUtils";
-import { readFileSync } from "fs";
-import { join } from "path";
 
 /**
  * Handle GitLab token modal submission
@@ -95,8 +91,8 @@ export async function handleCreateTagModal(interaction: ModalSubmitInteraction):
     // Update the original message to show loading state
     const loadingEmbed = new EmbedBuilder()
       .setColor(0xFFA500)
-      .setTitle("🔄 Creating Tag and Updating YAML")
-      .setDescription(`Creating tag **${tagName}** for **${serviceName}** and updating GitOps configuration...`)
+      .setTitle("🔄 Creating Tag")
+      .setDescription(`Creating tag **${tagName}** for **${serviceName}** in GitLab...`)
       .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
@@ -128,58 +124,8 @@ export async function handleCreateTagModal(interaction: ModalSubmitInteraction):
     
     const gitlabClient = new GitLabClient({ baseUrl: gitlabUrl, token: userToken });
 
-    // Load stack config to get GitOps info
-    const whitelistPath = join(process.cwd(), "whitelist_deploy.json");
-    const whitelistData = readFileSync(whitelistPath, "utf-8");
-    const whitelist = JSON.parse(whitelistData);
-    const stackConfig = whitelist.stacks?.[stackName];
-
-    if (!stackConfig) {
-      throw new Error(`Stack "${stackName}" configuration not found`);
-    }
-
     // Create the tag (from main branch)
     const tag = await gitlabClient.createTag(projectId, tagName, "main", tagMessage);
-
-    // Update YAML file with new tag
-    let yamlUpdated = false;
-    let yamlCommitInfo = null;
-    
-    try {
-      // Get current YAML content
-      const yamlContent = await gitlabClient.getFileRawContent(
-        stackConfig.gitOpsRepoId,
-        stackConfig.gitOpsFilePath,
-        stackConfig.gitOpsBranch
-      );
-
-      if (!validateServiceExists(yamlContent, serviceName)) {
-        throw new Error(`Service "${serviceName}" not found in GitOps configuration file`);
-      }
-
-      // Extract current tag and update YAML
-      const currentTag = extractCurrentImageTag(yamlContent, serviceName);
-      let updatedYamlContent = updateImageTagInYaml(yamlContent, serviceName, tagName);
-
-      // Validate and commit changes back to GitLab
-      const commitMessage = generateCommitMessage(serviceName, tagName, currentTag || undefined);
-      
-      // Validate and clean YAML content before upload
-      updatedYamlContent = validateYamlContent(updatedYamlContent);
-      
-      await gitlabClient.updateFile(
-        stackConfig.gitOpsRepoId,
-        stackConfig.gitOpsFilePath,
-        stackConfig.gitOpsBranch,
-        updatedYamlContent,
-        commitMessage
-      );
-
-      yamlUpdated = true;
-    } catch (error: any) {
-      console.error(`⚠️ Failed to update YAML file: ${error.message}`);
-      // Continue - tag was created successfully, YAML update failed
-    }
 
     // Success embed with user info
     const successEmbed = new EmbedBuilder()
@@ -195,54 +141,18 @@ export async function handleCreateTagModal(interaction: ModalSubmitInteraction):
         { name: "Created At", value: new Date(tag.commit.created_at).toLocaleString("id-ID"), inline: true },
         { name: "Tag Message", value: tagMessage, inline: false },
         { name: "Created By", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "Created On", value: new Date().toLocaleString("id-ID"), inline: true }
+        { name: "Created On", value: new Date().toLocaleString("id-ID"), inline: true },
+        { 
+          name: "📝 Next Step", 
+          value: `Use \`/deploy switch-tag\` to update the GitOps YAML with this new tag.`, 
+          inline: false 
+        }
       )
       .setFooter({ text: "Powered by MENI" })
       .setTimestamp();
 
-    // Add YAML update info if successful
-    if (yamlUpdated && yamlCommitInfo) {
-      successEmbed.addFields({
-        name: "📝 GitOps YAML Updated",
-        value: `✅ Updated \`${stackConfig.gitOpsFilePath}\``,
-        inline: false,
-      });
-      successEmbed.setDescription(
-        `Tag **${tagName}** created and GitOps configuration updated. Monitoring pipeline status...`
-      );
-    } else if (!yamlUpdated) {
-      successEmbed.addFields({
-        name: "⚠️ YAML Update Failed",
-        value: "Tag was created but YAML file could not be updated. Please update manually.",
-        inline: false,
-      });
-    }
-
     // Edit the original message with success
     await originalMessage.edit({ embeds: [successEmbed], components: [] });
-
-    // Check and monitor pipeline status if YAML was updated
-    if (yamlUpdated) {
-      const commitSha = tag?.commit?.id;
-      
-      if (commitSha) {
-        console.log(`🔍 Starting pipeline monitoring for commit: ${commitSha.substring(0, 8)}`);
-        // Start pipeline monitoring in background
-        monitorPipelineStatus(
-          gitlabClient,
-          projectId,
-          commitSha,
-          originalMessage,
-          interaction.channel,
-          serviceName,
-          tagName
-        ).catch((error) => {
-          console.error("❌ Pipeline monitoring error:", error);
-        });
-      } else {
-        console.warn("❌ No commit SHA available for pipeline monitoring.");
-      }
-    }
   } catch (error: any) {
     console.error("❌ Create tag modal error:", error);
 
