@@ -58,13 +58,16 @@ export function createMarketplaceUserPanel(guildId: string) {
         .setCustomId('marketplace_item_select')
         .setPlaceholder('Select an item to purchase...')
         .addOptions(
-          availableItems.map((item, index) => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(`${item.name} - ${item.price} points`)
-              .setDescription(`${item.description} (${item.quantity} available)`)
-              .setValue(index.toString())
-              .setEmoji('🛒')
-          )
+          stockItems
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => item.quantity > 0)
+            .map(({ item, index }) => 
+              new StringSelectMenuOptionBuilder()
+                .setLabel(`${item.name} - ${item.price} points`)
+                .setDescription(`${item.description} (${item.quantity} available)`)
+                .setValue(index.toString())
+                .setEmoji('🛒')
+            )
         )
     );
     components.push(selectMenu);
