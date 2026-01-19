@@ -1,5 +1,12 @@
-import { ButtonInteraction, EmbedBuilder, MessageFlags } from "discord.js";
-import { callAttendanceApi } from "../../utils/attendanceUtils";
+import {
+  ButtonInteraction,
+  EmbedBuilder,
+  MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+} from "discord.js";
 
 export async function handleAttendanceButton(interaction: ButtonInteraction) {
   const { customId, user } = interaction;
@@ -44,52 +51,25 @@ export async function handleAttendanceButton(interaction: ButtonInteraction) {
       return;
     }
 
-    await interaction.deferUpdate();
+    // Show modal for remarks input
+    const modal = new ModalBuilder()
+      .setCustomId(`attendance_remarks_modal:${guildId}`)
+      .setTitle("Presensi Remarks");
 
-    try {
-      const result = await callAttendanceApi(user.id, baseUrl, apiKey);
-      
-      if (result.success && result.message) {
-        const successEmbed = new EmbedBuilder()
-          .setColor("#00B894")
-          .setTitle("✅ Presensi Berhasil")
-          .setDescription(result.message)
-          .setFooter({ text: "Powered by MENI" })
-          .setTimestamp();
+    const remarksInput = new TextInputBuilder()
+      .setCustomId("attendance_remarks")
+      .setLabel("Remarks")
+      .setPlaceholder("Masukkan catatan untuk presensi ini...")
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(200)
+      .setRequired(true);
 
-        await interaction.editReply({
-          content: "",
-          embeds: [successEmbed],
-          components: [],
-        });
-      } else {
-        const errorEmbed = new EmbedBuilder()
-          .setColor("#E74C3C")
-          .setTitle("❌ Presensi Gagal")
-          .setDescription(
-            result.error ||
-              "Terjadi kesalahan saat menghubungi layanan presensi. Silakan coba lagi nanti."
-          )
-          .setFooter({ text: "Powered by MENI" })
-          .setTimestamp();
+    const remarksActionRow =
+      new ActionRowBuilder<TextInputBuilder>().addComponents(remarksInput);
 
-        await interaction.editReply({
-          content: "",
-          embeds: [errorEmbed],
-          components: [],
-        });
-      }
-    } catch (error) {
-      console.error("❌ Error processing attendance button:", error);
+    modal.addComponents(remarksActionRow);
 
-      await interaction.editReply({
-        content:
-          "❌ Terjadi kesalahan tidak terduga saat memproses presensi. Silakan coba lagi nanti.",
-        embeds: [],
-        components: [],
-      });
-    }
-
+    await interaction.showModal(modal);
     return;
   }
 

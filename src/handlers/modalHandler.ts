@@ -4,6 +4,7 @@ import { handleAddStockModal, handleUpdateStockModal, handleRemoveStockModal } f
 import { handleLinkProtectionWhitelistModal } from "./modals/moderationModalHandler";
 import { handleDoneReviewModal } from "./modals/reviewModalHandler";
 import { handleWelcomeMessageModal, handleThanksReasonModal } from "./modals/generalModalHandler";
+import { handleAttendanceRemarksModal } from "./modals/attendanceModalHandler";
 
 /**
  * Main modal handler router
@@ -23,25 +24,28 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
     return;
   }
 
-  // Modals with message ID (format: modalType:messageId)
+  // Modals with message ID or guild ID (format: modalType:id)
   if (customId.includes(":")) {
-    const [modalType, messageId] = customId.split(":");
+    const [modalType, id] = customId.split(":");
 
     switch (modalType) {
       case "stock_add_modal":
-        await handleAddStockModal(interaction, messageId);
+        await handleAddStockModal(interaction, id);
         break;
       case "stock_update_modal":
-        await handleUpdateStockModal(interaction, messageId);
+        await handleUpdateStockModal(interaction, id);
         break;
       case "stock_remove_modal":
-        await handleRemoveStockModal(interaction, messageId);
+        await handleRemoveStockModal(interaction, id);
         break;
       case "link_protection_whitelist_modal":
-        await handleLinkProtectionWhitelistModal(interaction, messageId);
+        await handleLinkProtectionWhitelistModal(interaction, id);
         break;
       case "done_review_modal":
-        await handleDoneReviewModal(interaction, messageId);
+        await handleDoneReviewModal(interaction, id);
+        break;
+      case "attendance_remarks_modal":
+        await handleAttendanceRemarksModal(interaction);
         break;
       default:
         await interaction.reply({

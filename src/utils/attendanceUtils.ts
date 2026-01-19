@@ -47,18 +47,25 @@ export interface AttendanceReport {
 export async function callAttendanceApi(
   discordId: string,
   baseUrl: string,
-  apiKey: string
+  apiKey: string,
+  remarks?: string
 ): Promise<{
   success: boolean;
   message?: string;
   error?: string;
 }> {
   try {
+    const payload: { discord_id: string; remarks?: string } = {
+      discord_id: discordId,
+    };
+
+    if (remarks) {
+      payload.remarks = remarks;
+    }
+
     const response = await axios.post<AttendanceApiResponse>(
       baseUrl,
-      {
-        discord_id: discordId,
-      },
+      payload,
       {
         headers: {
           "X-Api-Key": apiKey,
