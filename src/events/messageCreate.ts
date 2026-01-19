@@ -10,7 +10,10 @@ export async function execute(message: Message) {
     if (message.author.bot || !message.guildId) return;
 
     // Check if message mentions the bot or is a reply to a bot message
-    const isBotMentioned = message.mentions.has(message.client.user);
+    // Don't respond if @everyone or @here is mentioned
+    const hasEveryoneMention = message.mentions.everyone;
+    const hasHereMention = message.content.includes('@here');
+    const isBotMentioned = !hasEveryoneMention && !hasHereMention && message.mentions.has(message.client.user);
     let isReplyToBot = false;
     let referencedMessageContent: string | undefined;
 
