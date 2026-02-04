@@ -8,11 +8,13 @@ export async function handleAttendanceRemarksModal(
   interaction: ModalSubmitInteraction
 ): Promise<void> {
   const { customId, user } = interaction;
+  const client = interaction.client;
 
-  // Extract guildId from customId (format: attendance_remarks_modal:guildId)
-  const [, guildId] = customId.split(":");
+  // Extract guildId, channelId, and messageId from customId
+  // Format: attendance_remarks_modal:guildId:channelId:messageId
+  const [, guildId, channelId, messageId] = customId.split(":");
 
-  if (!guildId) {
+  if (!guildId || !channelId || !messageId) {
     await interaction.reply({
       content: "❌ Invalid attendance modal data.",
       flags: MessageFlags.Ephemeral,
@@ -48,9 +50,25 @@ export async function handleAttendanceRemarksModal(
         .setFooter({ text: "Powered by MENI" })
         .setTimestamp();
 
+      // Edit the original message to show success and remove buttons
+      try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel && 'messages' in channel) {
+          const originalMessage = await channel.messages.fetch(messageId);
+          await originalMessage.edit({
+            content: "✅ Presensi berhasil dikirim!",
+            embeds: [successEmbed],
+            components: [],
+          });
+        }
+      } catch (editError) {
+        console.error("⚠️ Could not edit original message:", editError);
+        // Continue with reply even if edit fails
+      }
+
       await interaction.editReply({
-        content: "",
-        embeds: [successEmbed],
+        content: "✅ Presensi berhasil dikirim!",
+        embeds: [],
         components: [],
       });
     } else {

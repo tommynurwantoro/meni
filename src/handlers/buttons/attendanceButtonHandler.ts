@@ -1,6 +1,5 @@
 import {
   ButtonInteraction,
-  EmbedBuilder,
   MessageFlags,
   ModalBuilder,
   TextInputBuilder,
@@ -9,7 +8,7 @@ import {
 } from "discord.js";
 
 export async function handleAttendanceButton(interaction: ButtonInteraction) {
-  const { customId, user } = interaction;
+  const { customId } = interaction;
 
   if (!customId.startsWith("attendance_")) {
     await interaction.reply({
@@ -52,8 +51,9 @@ export async function handleAttendanceButton(interaction: ButtonInteraction) {
     }
 
     // Show modal for remarks input
+    // Include message ID and channel ID in customId to edit the original message later
     const modal = new ModalBuilder()
-      .setCustomId(`attendance_remarks_modal:${guildId}`)
+      .setCustomId(`attendance_remarks_modal:${guildId}:${interaction.channelId}:${interaction.message.id}`)
       .setTitle("Presensi Remarks");
 
     const remarksInput = new TextInputBuilder()
