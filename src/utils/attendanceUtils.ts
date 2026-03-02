@@ -48,19 +48,19 @@ export async function callAttendanceApi(
   discordId: string,
   baseUrl: string,
   apiKey: string,
-  remarks?: string
+  remark?: string
 ): Promise<{
   success: boolean;
   message?: string;
   error?: string;
 }> {
   try {
-    const payload: { discord_id: string; remarks?: string } = {
+    const payload: { discord_id: string; remark?: string } = {
       discord_id: discordId,
     };
 
-    if (remarks) {
-      payload.remarks = remarks;
+    if (remark) {
+      payload.remark = remark;
     }
 
     const response = await axios.post<AttendanceApiResponse>(
